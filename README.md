@@ -86,14 +86,18 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
 - Email/password **sign up & sign in** (whole app is gated behind auth)
 - Search **any** movie or browse what's popular
 - **Half-star precision** — rate from 0.5 to 5.0 in 0.5 steps (e.g. 3.5)
-- Optional written **reviews**
+- **Two rating modes:** *Simple* (one score) or *Detailed* — rate **Movie, Directing,
+  Acting, Music & Scenario** separately and the average becomes your score
+- **Activity feed** — a global *Everyone* feed plus your personal *You* feed
+- Optional written **reviews** + a community **per-aspect breakdown**
 - **Watchlist** — save movies to watch later (private to each user)
 - **Community average** computed from all users, alongside the TMDB score
 - **"My ratings"** and **"Watchlist"** views
 - Update or remove your rating any time
 
-## 🔄 Already deployed? Run the migration
-If you set up CineRate before the watchlist / half-star update, run
-[`supabase-migration.sql`](supabase-migration.sql) once in **Supabase → SQL Editor**.
-It widens ratings to half-steps and creates the `watchlist` table. Fresh installs
-using [`supabase-schema.sql`](supabase-schema.sql) already include everything.
+## 🔄 Already deployed? Run the migrations
+Run these once each in **Supabase → SQL Editor** (safe to re-run), in order:
+1. [`supabase-migration.sql`](supabase-migration.sql) — half-star ratings + `watchlist` table
+2. [`supabase-migration-2.sql`](supabase-migration-2.sql) — detailed (multi-aspect) ratings
+
+Fresh installs using [`supabase-schema.sql`](supabase-schema.sql) already include everything.

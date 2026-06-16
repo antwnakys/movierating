@@ -11,13 +11,35 @@ create table if not exists public.ratings (
   movie_title text not null,
   movie_poster text,
   movie_year  text,
-  -- 0.5 .. 5.0 in half-star steps
-  rating      numeric(2,1) not null
-              check (rating >= 0.5 and rating <= 5 and (rating * 2) = floor(rating * 2)),
+  -- Overall score: simple rating, or the average of the 5 aspects below.
+  -- A detailed average can be e.g. 4.2, so only the range is enforced here.
+  rating      numeric(2,1) not null check (rating >= 0.5 and rating <= 5),
+  -- 'simple' = one rating; 'detailed' = the 5 aspects below
+  mode        text not null default 'simple' check (mode in ('simple', 'detailed')),
+  rating_movie     numeric(2,1),
+  rating_directing numeric(2,1),
+  rating_acting    numeric(2,1),
+  rating_music     numeric(2,1),
+  rating_scenario  numeric(2,1),
   review      text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-  unique (user_id, movie_id)
+  unique (user_id, movie_id),
+  -- each aspect: null or a valid half-step 0.5..5
+  constraint ratings_aspects_valid check (
+    (rating_movie     is null or (rating_movie     between 0.5 and 5 and (rating_movie     * 2) = floor(rating_movie     * 2))) and
+    (rating_directing is null or (rating_directing between 0.5 and 5 and (rating_directing * 2) = floor(rating_directing * 2))) and
+    (rating_acting    is null or (rating_acting    between 0.5 and 5 and (rating_acting    * 2) = floor(rating_acting    * 2))) and
+    (rating_music     is null or (rating_music     between 0.5 and 5 and (rating_music     * 2) = floor(rating_music     * 2))) and
+    (rating_scenario  is null or (rating_scenario  between 0.5 and 5 and (rating_scenario  * 2) = floor(rating_scenario  * 2)))
+  ),
+  -- detailed mode requires all five aspects
+  constraint ratings_detailed_complete check (
+    mode = 'simple' or (
+      rating_movie is not null and rating_directing is not null and rating_acting is not null
+      and rating_music is not null and rating_scenario is not null
+    )
+  )
 );
 
 create index if not exists ratings_movie_id_idx on public.ratings (movie_id);
