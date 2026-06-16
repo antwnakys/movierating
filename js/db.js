@@ -98,6 +98,88 @@ export async function getRecentActivity(limit = 40) {
   return data || [];
 }
 
+// A page of one user's ratings (their "watched" list). 0-indexed.
+export async function getUserRatingsPage(userId, from = 0, size = 18) {
+  const { data, error } = await supabase
+    .from("ratings")
+    .select("*")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .range(from, from + size - 1);
+  if (error) throw error;
+  return data || [];
+}
+
+// ---- Profiles ----
+
+// Create the profile row on first sign-in (won't overwrite an existing one).
+export async function ensureProfile(user) {
+  return supabase.from("profiles").upsert(
+    { id: user.id, display_name: user.user_metadata?.display_name || user.email.split("@")[0] },
+    { onConflict: "id", ignoreDuplicates: true }
+  );
+}
+
+export async function getProfile(userId) {
+  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProfile(userId, fields) {
+  return supabase
+    .from("profiles")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", userId);
+}
+
+// Upload an avatar image and return its public URL.
+export async function uploadAvatar(userId, file) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${userId}/avatar_${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from("avatars")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw error;
+  const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// ---- Follows ----
+
+export async function follow(followerId, followingId) {
+  return supabase.from("follows").insert({ follower_id: followerId, following_id: followingId });
+}
+
+export async function unfollow(followerId, followingId) {
+  return supabase
+    .from("follows")
+    .delete()
+    .eq("follower_id", followerId)
+    .eq("following_id", followingId);
+}
+
+export async function isFollowing(followerId, followingId) {
+  const { count } = await supabase
+    .from("follows")
+    .select("*", { count: "exact", head: true })
+    .eq("follower_id", followerId)
+    .eq("following_id", followingId);
+  return (count || 0) > 0;
+}
+
+export async function getFollowCounts(userId) {
+  const followers = await supabase
+    .from("follows")
+    .select("*", { count: "exact", head: true })
+    .eq("following_id", userId);
+  const following = await supabase
+    .from("follows")
+    .select("*", { count: "exact", head: true })
+    .eq("follower_id", userId);
+  return { followers: followers.count || 0, following: following.count || 0 };
+}
+
 // ---- Watchlist ----
 
 export async function addToWatchlist({ movie, user }) {

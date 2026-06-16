@@ -88,16 +88,20 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
 - **Half-star precision** — rate from 0.5 to 5.0 in 0.5 steps (e.g. 3.5)
 - **Two rating modes:** *Simple* (one score) or *Detailed* — rate **Movie, Directing,
   Acting, Music & Scenario** separately and the average becomes your score
+- **Cast & director** shown on every movie (photos, names, characters)
 - **Activity feed** — a global *Everyone* feed plus your personal *You* feed
+- **Profiles** — avatar upload, bio, a **Top 5** movies showcase, and a
+  scrollable **Watched** history
+- **Follow** other users; click any name/avatar to open their profile
 - Optional written **reviews** + a community **per-aspect breakdown**
 - **Watchlist** — save movies to watch later (private to each user)
 - **Community average** computed from all users, alongside the TMDB score
-- **"My ratings"** and **"Watchlist"** views
 - Update or remove your rating any time
 
 ## 🔄 Already deployed? Run the migrations
 Run these once each in **Supabase → SQL Editor** (safe to re-run), in order:
 1. [`supabase-migration.sql`](supabase-migration.sql) — half-star ratings + `watchlist` table
 2. [`supabase-migration-2.sql`](supabase-migration-2.sql) — detailed (multi-aspect) ratings
+3. [`supabase-migration-3.sql`](supabase-migration-3.sql) — profiles, follows, avatar storage
 
 Fresh installs using [`supabase-schema.sql`](supabase-schema.sql) already include everything.

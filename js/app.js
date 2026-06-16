@@ -22,6 +22,8 @@ const state = {
   totalPages: 1,
   loading: false,
   watchlistIds: new Set(),
+  myProfile: null,
+  topMovieIds: new Set(),
 };
 
 // The five aspects of a detailed rating: [key, label, db column]
@@ -83,6 +85,8 @@ function setupAuthUI() {
   });
 
   $("#signOutBtn").addEventListener("click", () => DB.signOut());
+  $("#profileBtn").addEventListener("click", () => openProfile(state.user.id));
+  $("#avatarInput").addEventListener("change", onAvatarPicked);
   $("#activityBtn").addEventListener("click", () => loadActivity("all"));
   $("#watchlistBtn").addEventListener("click", () => loadWatchlist());
   $("#myRatingsBtn").addEventListener("click", () => loadMine());
@@ -163,6 +167,7 @@ async function loadSearch(query, page = 1) {
 async function runLoad(fetcher, reset) {
   if (state.loading) return;
   state.loading = true;
+  showBrowse();
   $("#grid").classList.remove("list");
   if (reset) {
     $("#grid").innerHTML = "";
@@ -185,6 +190,7 @@ async function runLoad(fetcher, reset) {
 
 async function loadMine() {
   state.mode = "mine";
+  showBrowse();
   $("#sectionTitle").textContent = "My ratings";
   $("#loadMore").classList.add("hidden");
   $("#grid").classList.remove("list");
@@ -218,6 +224,7 @@ async function loadMine() {
 
 async function loadWatchlist() {
   state.mode = "watch";
+  showBrowse();
   $("#sectionTitle").textContent = "Your watchlist";
   $("#loadMore").classList.add("hidden");
   $("#grid").classList.remove("list");
@@ -282,9 +289,9 @@ function activityItem(r) {
     : `<div class="feed-poster"></div>`;
   const item = el(`
     <div class="feed-item">
-      <div class="review-avatar">${esc(initials)}</div>
+      <div class="review-avatar author-link" data-uid="${r.user_id}">${esc(initials)}</div>
       <div class="feed-body">
-        <div class="feed-line"><b>${esc(r.user_name || "Someone")}</b> rated <b>${esc(r.movie_title)}</b>${r.movie_year ? " (" + esc(r.movie_year) + ")" : ""}</div>
+        <div class="feed-line"><b class="author-link" data-uid="${r.user_id}">${esc(r.user_name || "Someone")}</b> rated <b>${esc(r.movie_title)}</b>${r.movie_year ? " (" + esc(r.movie_year) + ")" : ""}</div>
         <div class="feed-meta">
           ${starsDisplay(r.rating, "sm")}
           <span class="feed-score">${Number(r.rating).toFixed(1)}</span>
@@ -297,12 +304,19 @@ function activityItem(r) {
     </div>
   `);
   item.addEventListener("click", () => openMovie(r.movie_id));
+  item.querySelectorAll(".author-link").forEach((a) =>
+    a.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openProfile(r.user_id);
+    })
+  );
   return item;
 }
 
 async function loadActivity(scope = activityScope) {
   activityScope = scope;
   state.mode = "activity";
+  showBrowse();
   $("#loadMore").classList.add("hidden");
   $("#sectionTitle").innerHTML = `Activity
     <span class="scope-toggle">
@@ -334,6 +348,244 @@ async function loadActivity(scope = activityScope) {
   } catch (err) {
     $("#gridStatus").textContent = "⚠️ " + err.message;
   }
+}
+
+// =====================================================
+//  PROFILES + FOLLOWING
+// =====================================================
+function showBrowse() {
+  $("#browseView").classList.remove("hidden");
+  $("#profileView").classList.add("hidden");
+}
+function showProfileView() {
+  $("#browseView").classList.add("hidden");
+  $("#profileView").classList.remove("hidden");
+}
+
+// Load the signed-in user's own profile into state (for follow / top-5 actions).
+async function loadMyProfileState() {
+  try {
+    await DB.ensureProfile(state.user);
+    state.myProfile = (await DB.getProfile(state.user.id)) || { top_movies: [] };
+    const top = Array.isArray(state.myProfile.top_movies) ? state.myProfile.top_movies : [];
+    state.topMovieIds = new Set(top.map((x) => x.id));
+  } catch {
+    state.myProfile = { top_movies: [] };
+  }
+}
+
+function avatarHTML(profile, name, cls = "") {
+  return profile?.avatar_url
+    ? `<img class="avatar-img ${cls}" src="${esc(profile.avatar_url)}" alt="${esc(name)}" />`
+    : `<div class="avatar-img ${cls} placeholder">${esc((name || "?").slice(0, 1).toUpperCase())}</div>`;
+}
+
+function top5Card(mv, i, isSelf) {
+  const poster = mv.poster
+    ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${mv.poster}" alt="${esc(mv.title)}" />`
+    : `<div class="poster placeholder">${esc(mv.title)}</div>`;
+  return `<div class="top5-card" data-mid="${mv.id}">
+    <span class="top5-rank">${i + 1}</span>
+    ${isSelf ? `<button class="top5-remove" data-id="${mv.id}" title="Remove">✕</button>` : ""}
+    ${poster}
+    <div class="top5-title">${esc(mv.title)}</div>
+  </div>`;
+}
+
+let watchedObserver = null;
+
+async function openProfile(userId) {
+  state.mode = "profile";
+  closeModal();
+  showProfileView();
+  const view = $("#profileView");
+  view.innerHTML = `<div class="grid-status">Loading…</div>`;
+  try {
+    const isSelf = userId === state.user.id;
+    const [profile, counts, following] = await Promise.all([
+      DB.getProfile(userId),
+      DB.getFollowCounts(userId),
+      isSelf ? Promise.resolve(false) : DB.isFollowing(state.user.id, userId),
+    ]);
+    renderProfile(userId, profile, counts, following, isSelf);
+  } catch (err) {
+    view.innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
+function renderProfile(userId, profile, counts, following, isSelf) {
+  const name = profile?.display_name || "User";
+  const bio = profile?.bio || "";
+  const top = Array.isArray(profile?.top_movies) ? profile.top_movies : [];
+  const view = $("#profileView");
+
+  view.innerHTML = `
+    <div class="profile-head">
+      <div class="profile-avatar-wrap">
+        ${avatarHTML(profile, name, "lg")}
+        ${isSelf ? '<button class="avatar-edit" id="avatarEdit" title="Change photo">✎</button>' : ""}
+      </div>
+      <div class="profile-info">
+        <h2 class="profile-name">${esc(name)}</h2>
+        <div class="profile-stats">
+          <span><b id="followerCount">${counts.followers}</b> followers</span>
+          <span><b>${counts.following}</b> following</span>
+        </div>
+        <p class="profile-bio" id="profileBio">${bio ? esc(bio) : `<span class="muted">${isSelf ? "Add a bio…" : ""}</span>`}</p>
+        <div class="profile-actions">
+          ${
+            isSelf
+              ? '<button class="btn btn-ghost" id="editProfileBtn">Edit bio</button>'
+              : `<button class="btn ${following ? "btn-watch active" : "btn-primary"}" id="followBtn">${following ? "Following ✓" : "Follow"}</button>`
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3>Top 5 ${isSelf ? '<span class="muted small">— add from any movie’s page</span>' : ""}</h3>
+      <div class="top5-row">
+        ${
+          top.length
+            ? top.map((mv, i) => top5Card(mv, i, isSelf)).join("")
+            : `<p class="empty">${isSelf ? 'No favourites yet — open a movie and tap "Add to Top 5".' : "No favourites yet."}</p>`
+        }
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3>Watched</h3>
+      <div class="grid" id="watchedGrid"></div>
+      <div class="grid-status" id="watchedStatus"></div>
+    </div>
+  `;
+
+  if (isSelf) {
+    $("#avatarEdit").addEventListener("click", () => $("#avatarInput").click());
+    $("#editProfileBtn").addEventListener("click", () => editBio(userId));
+    view.querySelectorAll(".top5-remove").forEach((b) =>
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeTopMovie(Number(b.dataset.id));
+      })
+    );
+  } else {
+    $("#followBtn").addEventListener("click", () => toggleFollow(userId));
+  }
+  view.querySelectorAll(".top5-card").forEach((c) =>
+    c.addEventListener("click", () => openMovie(Number(c.dataset.mid)))
+  );
+
+  initWatched(userId);
+}
+
+// Infinite-scroll list of the user's watched (rated) movies.
+async function initWatched(userId) {
+  const grid = $("#watchedGrid");
+  const status = $("#watchedStatus");
+  let from = 0;
+  const size = 18;
+  let done = false;
+  let loading = false;
+  if (watchedObserver) watchedObserver.disconnect();
+
+  const loadPage = async () => {
+    if (done || loading) return;
+    loading = true;
+    status.textContent = "Loading…";
+    try {
+      const rows = await DB.getUserRatingsPage(userId, from, size);
+      rows.forEach((r) => {
+        const m = {
+          id: r.movie_id,
+          title: r.movie_title,
+          poster_path: r.movie_poster,
+          release_date: r.movie_year || "",
+          vote_average: null,
+        };
+        const card = movieCard(m);
+        card.querySelector(".card-meta").innerHTML =
+          `<span>${esc(r.movie_year || "—")}</span><span class="badge-star">★ ${Number(r.rating).toFixed(1)}</span>`;
+        grid.appendChild(card);
+      });
+      from += rows.length;
+      if (rows.length < size) {
+        done = true;
+        status.textContent = grid.children.length ? "" : "No movies watched yet.";
+      } else {
+        status.textContent = "";
+      }
+    } catch (err) {
+      status.textContent = "⚠️ " + err.message;
+      done = true;
+    }
+    loading = false;
+  };
+
+  await loadPage();
+  watchedObserver = new IntersectionObserver(
+    (entries) => entries[0].isIntersecting && loadPage(),
+    { rootMargin: "300px" }
+  );
+  watchedObserver.observe(status);
+}
+
+function editBio(userId) {
+  const current = state.myProfile?.bio || "";
+  $("#profileBio").innerHTML = `
+    <textarea id="bioInput" class="bio-input" maxlength="200" placeholder="Write a short bio…">${esc(current)}</textarea>
+    <div class="bio-actions">
+      <button class="btn btn-primary" id="bioSave">Save</button>
+      <button class="btn btn-ghost" id="bioCancel">Cancel</button>
+    </div>`;
+  $("#bioSave").addEventListener("click", async () => {
+    const val = $("#bioInput").value.trim();
+    const { error } = await DB.updateProfile(userId, { bio: val });
+    if (!error) {
+      state.myProfile.bio = val;
+      openProfile(userId);
+    }
+  });
+  $("#bioCancel").addEventListener("click", () => openProfile(userId));
+}
+
+async function onAvatarPicked(e) {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const url = await DB.uploadAvatar(state.user.id, file);
+    await DB.updateProfile(state.user.id, { avatar_url: url });
+    state.myProfile.avatar_url = url;
+    if (state.mode === "profile") openProfile(state.user.id);
+  } catch (err) {
+    alert("Couldn't upload photo: " + err.message);
+  }
+}
+
+async function toggleFollow(userId) {
+  const btn = $("#followBtn");
+  btn.disabled = true;
+  const currently = btn.classList.contains("active");
+  try {
+    const { error } = currently
+      ? await DB.unfollow(state.user.id, userId)
+      : await DB.follow(state.user.id, userId);
+    if (error) throw error;
+  } catch {
+    btn.disabled = false;
+    return;
+  }
+  openProfile(userId);
+}
+
+async function removeTopMovie(id) {
+  const top = (state.myProfile?.top_movies || []).filter((x) => x.id !== id);
+  const { error } = await DB.updateProfile(state.user.id, { top_movies: top });
+  if (error) return;
+  state.myProfile.top_movies = top;
+  state.topMovieIds = new Set(top.map((x) => x.id));
+  openProfile(state.user.id);
 }
 
 // =====================================================
@@ -470,6 +722,7 @@ function renderModal() {
         <p class="detail-overview">${esc(m.overview || "No synopsis available.")}</p>
         <div class="detail-actions">
           <button class="btn btn-watch" id="watchToggle"></button>
+          <button class="btn btn-watch" id="top5Toggle"></button>
         </div>
       </div>
     </div>
@@ -564,9 +817,56 @@ function renderModal() {
   wireStarInputs($("#modalBody"));
   wireModeToggle();
   updateWatchBtn();
+  updateTop5Btn();
   $("#watchToggle").addEventListener("click", toggleWatch);
+  $("#top5Toggle").addEventListener("click", toggleTop5);
   $("#saveRating").addEventListener("click", saveRating);
   if (myExisting) $("#deleteRating").addEventListener("click", removeRating);
+  $("#modalBody")
+    .querySelectorAll(".author-link")
+    .forEach((a) =>
+      a.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openProfile(a.dataset.uid);
+      })
+    );
+}
+
+function updateTop5Btn() {
+  const btn = $("#top5Toggle");
+  if (!btn) return;
+  const inTop = state.topMovieIds.has(modalState.movie.id);
+  const full = state.topMovieIds.size >= 5 && !inTop;
+  btn.textContent = inTop ? "★ In your Top 5" : full ? "Top 5 full" : "＋ Add to Top 5";
+  btn.classList.toggle("active", inTop);
+  btn.disabled = full;
+}
+
+async function toggleTop5() {
+  const m = modalState.movie;
+  const inTop = state.topMovieIds.has(m.id);
+  let top = Array.isArray(state.myProfile?.top_movies) ? [...state.myProfile.top_movies] : [];
+  if (inTop) {
+    top = top.filter((x) => x.id !== m.id);
+  } else {
+    if (top.length >= 5) return;
+    top.push({
+      id: m.id,
+      title: m.title,
+      poster: m.poster_path || null,
+      year: (m.release_date || "").slice(0, 4) || null,
+    });
+  }
+  const btn = $("#top5Toggle");
+  btn.disabled = true;
+  const { error } = await DB.updateProfile(state.user.id, { top_movies: top });
+  if (error) {
+    btn.textContent = "⚠️ " + error.message;
+    return;
+  }
+  state.myProfile.top_movies = top;
+  state.topMovieIds = new Set(top.map((x) => x.id));
+  updateTop5Btn();
 }
 
 function wireModeToggle() {
@@ -622,7 +922,7 @@ function reviewItem(r) {
       <div class="review-avatar">${esc(initials)}</div>
       <div class="review-content">
         <div class="review-head">
-          <span class="review-name">${esc(r.user_name || "Anonymous")}</span>
+          <span class="review-name author-link" data-uid="${r.user_id}">${esc(r.user_name || "Anonymous")}</span>
           ${starsDisplay(r.rating, "sm")}
           <span class="review-date">${date}</span>
         </div>
@@ -768,8 +1068,11 @@ function boot() {
       showApp();
       loadPopular();
       refreshWatchlistIds();
+      loadMyProfileState();
     } else {
       state.watchlistIds = new Set();
+      state.myProfile = null;
+      state.topMovieIds = new Set();
       showAuthScreen();
     }
   });
