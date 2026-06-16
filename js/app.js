@@ -38,6 +38,65 @@ const emptyAspects = () => ({ movie: 0, directing: 0, acting: 0, music: 0, scena
 const num = (v) => (v == null ? 0 : Number(v));
 
 // =====================================================
+//  DEVICE MODE (mobile vs desktop layout)
+// =====================================================
+function isMobileDevice() {
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 720;
+}
+
+// Mobile layout when the viewport is narrow OR the user explicitly chose mobile.
+function applyDeviceMode() {
+  const choice = localStorage.getItem("cinerate_device");
+  const mobile = window.innerWidth <= 720 || choice === "mobile";
+  document.body.classList.toggle("device-mobile", mobile);
+  document.body.classList.toggle("device-desktop", !mobile);
+  const vt = $("#viewToggle");
+  if (vt) vt.textContent = mobile ? "🖥 Desktop view" : "📱 Mobile view";
+}
+
+function chooseDevice(device) {
+  localStorage.setItem("cinerate_device", device);
+  applyDeviceMode();
+  $("#deviceScreen").classList.add("hidden");
+}
+
+function setupDevice() {
+  applyDeviceMode();
+  window.addEventListener("resize", applyDeviceMode);
+
+  document.querySelectorAll(".device-opt").forEach((opt) =>
+    opt.addEventListener("click", () => chooseDevice(opt.dataset.device))
+  );
+
+  // Show the welcome screen only on the very first visit.
+  if (!localStorage.getItem("cinerate_device")) {
+    const detected = isMobileDevice() ? "recMobile" : "recDesktop";
+    $("#" + detected).textContent = "Recommended for you";
+    $("#deviceScreen").classList.remove("hidden");
+  }
+
+  // Hamburger menu
+  $("#navToggle").addEventListener("click", (e) => {
+    e.stopPropagation();
+    $("#navMenu").classList.toggle("open");
+  });
+  $("#navMenu").addEventListener("click", (e) => {
+    if (e.target.closest(".btn")) $("#navMenu").classList.remove("open");
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".user-menu") && !e.target.closest(".nav-toggle")) {
+      $("#navMenu").classList.remove("open");
+    }
+  });
+
+  // Switch layout from the menu
+  $("#viewToggle").addEventListener("click", () => {
+    const nowMobile = document.body.classList.contains("device-mobile");
+    chooseDevice(nowMobile ? "desktop" : "mobile");
+  });
+}
+
+// =====================================================
 //  CONFIG CHECK
 // =====================================================
 function configIncomplete() {
@@ -1164,6 +1223,7 @@ function setupAppUI() {
 //  BOOT
 // =====================================================
 function boot() {
+  setupDevice();
   setupAuthUI();
   setupAppUI();
 

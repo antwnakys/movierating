@@ -9,6 +9,28 @@
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
+  <!-- ============ DEVICE WELCOME ============ -->
+  <div id="deviceScreen" class="device-screen hidden">
+    <div class="device-card">
+      <span class="brand-mark big">★</span>
+      <h1>Welcome to CineRate</h1>
+      <p>How are you browsing? We'll tailor the layout to your screen.</p>
+      <div class="device-options">
+        <button class="device-opt" data-device="mobile">
+          <span class="device-emoji">📱</span>
+          <span class="device-label">I'm on mobile</span>
+          <span class="device-rec" id="recMobile"></span>
+        </button>
+        <button class="device-opt" data-device="desktop">
+          <span class="device-emoji">💻</span>
+          <span class="device-label">I'm on a computer</span>
+          <span class="device-rec" id="recDesktop"></span>
+        </button>
+      </div>
+      <p class="device-note">You can switch anytime from the menu.</p>
+    </div>
+  </div>
+
   <!-- ============ TOP BAR ============ -->
   <header id="topbar" class="topbar hidden">
     <div class="topbar-inner">
@@ -16,15 +38,17 @@
         <span class="brand-mark">★</span> CineRate
       </a>
       <form id="searchForm" class="search">
-        <input id="searchInput" type="search" placeholder="Search any movie…" autocomplete="off" />
+        <input id="searchInput" type="search" placeholder="Search movies & people…" autocomplete="off" />
       </form>
-      <div class="user-menu">
+      <button id="navToggle" class="nav-toggle" aria-label="Menu">☰</button>
+      <div class="user-menu" id="navMenu">
         <span id="userName" class="user-name"></span>
         <button id="profileBtn" class="btn btn-ghost">My profile</button>
         <button id="activityBtn" class="btn btn-ghost">Activity</button>
         <button id="watchlistBtn" class="btn btn-ghost">Watchlist</button>
         <button id="myRatingsBtn" class="btn btn-ghost">My ratings</button>
         <button id="signOutBtn" class="btn btn-ghost">Sign out</button>
+        <button id="viewToggle" class="btn btn-ghost"></button>
         <input type="file" id="avatarInput" accept="image/*" class="hidden" />
       </div>
     </div>

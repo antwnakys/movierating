@@ -5,7 +5,9 @@
       "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Show cast + director on each movie; make detailed rating discoverable *)",
       "Bash(git push *)",
       "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Search users alongside movies in the search bar *)",
-      "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Add shareable deep links + Share buttons and followers/following lists *)"
+      "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Add shareable deep links + Share buttons and followers/following lists *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Mobile-friendly layout + device welcome screen *)"
     ]
   }
 }

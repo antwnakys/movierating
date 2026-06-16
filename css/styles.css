@@ -371,9 +371,90 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 .review-text { font-size: 14px; line-height: 1.5; color: #c7d0dc; }
 .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
 
-@media (max-width: 560px) {
-  .detail-main { flex-direction: column; margin-top: -60px; }
-  .detail-info { padding-top: 0; }
-  .detail-poster { width: 100px; }
-  .user-name, #myRatingsBtn { display: none; }
+/* ============================================================
+   DEVICE WELCOME SCREEN
+   ============================================================ */
+.device-screen {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: radial-gradient(1200px 600px at 50% -10%, #1d2740 0%, var(--bg) 60%);
+}
+.device-card { text-align: center; max-width: 440px; width: 100%; }
+.device-card h1 { margin: 12px 0 6px; font-size: 28px; }
+.device-card > p { color: var(--muted); margin: 0 0 28px; }
+.device-options { display: flex; gap: 16px; justify-content: center; }
+.device-opt {
+  flex: 1; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 26px 14px; cursor: pointer; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  transition: transform 0.12s, border-color 0.12s;
+}
+.device-opt:hover, .device-opt:active { transform: translateY(-3px); border-color: var(--accent); }
+.device-emoji { font-size: 42px; }
+.device-label { font-weight: 700; font-size: 15px; }
+.device-rec { font-size: 12px; color: var(--gold); min-height: 16px; }
+.device-note { color: var(--muted); font-size: 13px; margin-top: 22px; }
+
+/* ============================================================
+   HAMBURGER NAV (shown only in mobile layout)
+   ============================================================ */
+.nav-toggle {
+  display: none; background: transparent; border: none; color: var(--text);
+  font-size: 24px; cursor: pointer; padding: 4px 8px; line-height: 1;
+}
+
+/* ============================================================
+   MOBILE LAYOUT  (body.device-mobile — set by JS on narrow
+   viewports or when the user picks "mobile")
+   ============================================================ */
+.device-mobile .topbar-inner { position: relative; gap: 10px; padding: 10px 14px; }
+.device-mobile .brand { font-size: 18px; }
+.device-mobile .search input { padding: 9px 14px; font-size: 14px; }
+.device-mobile .nav-toggle { display: block; }
+.device-mobile .user-menu {
+  position: absolute; top: calc(100% + 8px); right: 8px; left: 8px;
+  flex-direction: column; align-items: stretch; gap: 4px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px; box-shadow: var(--shadow); display: none; z-index: 40;
+}
+.device-mobile .user-menu.open { display: flex; }
+.device-mobile .user-menu .btn { width: 100%; text-align: left; padding: 13px 14px; font-size: 15px; }
+.device-mobile .user-name { padding: 10px 14px; font-size: 13px; }
+
+.device-mobile .app { padding: 16px 12px 72px; }
+.device-mobile .section-head h2 { font-size: 19px; }
+.device-mobile .grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 12px; }
+
+/* Movie detail modal → full screen */
+.device-mobile .modal { padding: 0; }
+.device-mobile .modal-panel { max-width: 100%; width: 100%; height: 100%; max-height: 100%; border-radius: 0; border: none; }
+.device-mobile .detail-backdrop { height: 180px; }
+.device-mobile .detail-main { flex-direction: column; margin-top: -54px; gap: 12px; padding: 0 16px 16px; }
+.device-mobile .detail-info { padding-top: 0; }
+.device-mobile .detail-poster { width: 92px; }
+.device-mobile .detail-info h2 { font-size: 21px; }
+.device-mobile .score-row { gap: 22px; padding: 0 16px 18px; }
+.device-mobile .aspect-breakdown { padding: 0 16px 16px; gap: 14px; }
+.device-mobile .cast, .device-mobile .reviews { padding-left: 16px; padding-right: 16px; }
+.device-mobile .cast-card { width: 78px; }
+.device-mobile .cast-photo { width: 78px; height: 117px; }
+.device-mobile .rate-box { margin: 0 16px 8px; padding: 16px; }
+.device-mobile .rate-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+.device-mobile .detail-actions { flex-wrap: wrap; }
+.device-mobile .star-rate.input { font-size: 30px; }
+.device-mobile .aspect-row { gap: 8px; }
+.device-mobile .aspect-row .star-rate.input { font-size: 26px; }
+.device-mobile .aspect-label { width: 72px; font-size: 13px; }
+
+/* Profile */
+.device-mobile .profile-head { gap: 16px; padding: 12px 2px 22px; }
+.device-mobile .avatar-img.lg { width: 84px; height: 84px; font-size: 34px; }
+.device-mobile .profile-name { font-size: 22px; }
+.device-mobile .top5-card, .device-mobile .top5-card .poster { width: 104px; }
+
+/* People list / followers modal full screen too */
+.device-mobile .people-list-head { padding: 20px 18px 10px; }
+
+@media (max-width: 380px) {
+  .device-mobile .grid { grid-template-columns: repeat(2, 1fr); }
 }
