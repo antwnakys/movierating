@@ -97,6 +97,7 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
   for you" on your profile
 - **Activity feed** shows follower counts and a one-tap Follow button
 - **Shareable links** for movies and profiles (`?movie=` / `?user=`)
+- **Like** any movie (♥) — your liked movies show on your public profile
 - **Mobile-friendly** responsive layout with a device-choice welcome screen
 - Optional written **reviews** + a community **per-aspect breakdown**
 - **Watchlist** — save movies to watch later (private to each user)
@@ -109,5 +110,6 @@ Run these once each in **Supabase → SQL Editor** (safe to re-run), in order:
 2. [`supabase-migration-2.sql`](supabase-migration-2.sql) — detailed (multi-aspect) ratings
 3. [`supabase-migration-3.sql`](supabase-migration-3.sql) — profiles, follows, avatar storage
 4. [`supabase-migration-4.sql`](supabase-migration-4.sql) — movie recommendations
+5. [`supabase-migration-5.sql`](supabase-migration-5.sql) — liked movies
 
 Fresh installs using [`supabase-schema.sql`](supabase-schema.sql) already include everything.

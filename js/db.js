@@ -110,6 +110,41 @@ export async function getUserRatingsPage(userId, from = 0, size = 18) {
   return data || [];
 }
 
+// ---- Likes ----
+
+export async function likeMovie({ movie, user }) {
+  return supabase.from("likes").upsert(
+    {
+      user_id: user.id,
+      movie_id: movie.id,
+      movie_title: movie.title,
+      movie_poster: movie.poster_path || null,
+      movie_year: (movie.release_date || "").slice(0, 4) || null,
+    },
+    { onConflict: "user_id,movie_id" }
+  );
+}
+
+export async function unlikeMovie(userId, movieId) {
+  return supabase.from("likes").delete().eq("user_id", userId).eq("movie_id", movieId);
+}
+
+export async function getLikes(userId) {
+  const { data, error } = await supabase
+    .from("likes")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getLikedIds(userId) {
+  const { data, error } = await supabase.from("likes").select("movie_id").eq("user_id", userId);
+  if (error) throw error;
+  return (data || []).map((r) => r.movie_id);
+}
+
 // ---- Profiles ----
 
 // Create the profile row on first sign-in (won't overwrite an existing one).

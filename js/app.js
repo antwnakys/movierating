@@ -24,6 +24,7 @@ const state = {
   watchlistIds: new Set(),
   myProfile: null,
   topMovieIds: new Set(),
+  likedIds: new Set(),
 };
 
 // The five aspects of a detailed rating: [key, label, db column]
@@ -523,12 +524,13 @@ async function openProfile(userId) {
   view.innerHTML = `<div class="grid-status">Loading…</div>`;
   try {
     const isSelf = userId === state.user.id;
-    const [profile, counts, following] = await Promise.all([
+    const [profile, counts, following, likes] = await Promise.all([
       DB.getProfile(userId),
       DB.getFollowCounts(userId),
       isSelf ? Promise.resolve(false) : DB.isFollowing(state.user.id, userId),
+      DB.getLikes(userId).catch(() => []),
     ]);
-    renderProfile(userId, profile, counts, following, isSelf);
+    renderProfile(userId, profile, counts, following, isSelf, likes);
     if (isSelf) {
       loadIncomingRecs(userId);
       markRecsSeen();
@@ -593,7 +595,14 @@ async function loadIncomingRecs(userId) {
   }
 }
 
-function renderProfile(userId, profile, counts, following, isSelf) {
+function likeCard(l) {
+  const poster = l.movie_poster
+    ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${l.movie_poster}" alt="${esc(l.movie_title)}" />`
+    : `<div class="poster placeholder">${esc(l.movie_title)}</div>`;
+  return `<div class="top5-card" data-mid="${l.movie_id}">${poster}<div class="top5-title">${esc(l.movie_title)}</div></div>`;
+}
+
+function renderProfile(userId, profile, counts, following, isSelf, likes = []) {
   const name = profile?.display_name || "User";
   const bio = profile?.bio || "";
   const top = Array.isArray(profile?.top_movies) ? profile.top_movies : [];
@@ -632,6 +641,17 @@ function renderProfile(userId, profile, counts, following, isSelf) {
           top.length
             ? top.map((mv, i) => top5Card(mv, i, isSelf)).join("")
             : `<p class="empty">${isSelf ? 'No favourites yet — open a movie and tap "Add to Top 5".' : "No favourites yet."}</p>`
+        }
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3>Liked ${likes.length ? `<span class="muted small">${likes.length}</span>` : ""} ${isSelf ? '<span class="muted small">— tap ♡ on any movie</span>' : ""}</h3>
+      <div class="top5-row">
+        ${
+          likes.length
+            ? likes.map(likeCard).join("")
+            : `<p class="empty">${isSelf ? "No liked movies yet — open a movie and tap ♡ Like." : "No liked movies yet."}</p>`
         }
       </div>
     </div>
@@ -1036,6 +1056,7 @@ function renderModal() {
         ${directors.length ? `<div class="detail-director">🎬 Directed by <b>${directors.map(esc).join(", ")}</b></div>` : ""}
         <p class="detail-overview">${esc(m.overview || "No synopsis available.")}</p>
         <div class="detail-actions">
+          <button class="btn btn-watch" id="likeToggle"></button>
           <button class="btn btn-watch" id="watchToggle"></button>
           <button class="btn btn-watch" id="top5Toggle"></button>
           <button class="btn btn-watch" id="recommendMovie">📨 Recommend</button>
@@ -1135,6 +1156,8 @@ function renderModal() {
   wireModeToggle();
   updateWatchBtn();
   updateTop5Btn();
+  updateLikeBtn();
+  $("#likeToggle").addEventListener("click", toggleLike);
   $("#watchToggle").addEventListener("click", toggleWatch);
   $("#top5Toggle").addEventListener("click", toggleTop5);
   $("#shareMovie").addEventListener("click", (e) =>
@@ -1151,6 +1174,40 @@ function renderModal() {
         openProfile(a.dataset.uid);
       })
     );
+}
+
+function updateLikeBtn() {
+  const btn = $("#likeToggle");
+  if (!btn) return;
+  const liked = state.likedIds.has(modalState.movie.id);
+  btn.textContent = liked ? "♥ Liked" : "♡ Like";
+  btn.classList.toggle("liked", liked);
+}
+
+async function toggleLike() {
+  const m = modalState.movie;
+  const liked = state.likedIds.has(m.id);
+  const btn = $("#likeToggle");
+  btn.disabled = true;
+  const { error } = liked
+    ? await DB.unlikeMovie(state.user.id, m.id)
+    : await DB.likeMovie({ movie: m, user: state.user });
+  btn.disabled = false;
+  if (error) {
+    btn.textContent = "⚠️ " + error.message;
+    return;
+  }
+  if (liked) state.likedIds.delete(m.id);
+  else state.likedIds.add(m.id);
+  updateLikeBtn();
+}
+
+async function refreshLikedIds() {
+  try {
+    state.likedIds = new Set(await DB.getLikedIds(state.user.id));
+  } catch {
+    /* likes table may not exist yet */
+  }
 }
 
 function updateTop5Btn() {
@@ -1395,11 +1452,13 @@ function boot() {
       showApp();
       loadPopular();
       refreshWatchlistIds();
+      refreshLikedIds();
       loadMyProfileState();
       refreshRecBadge();
       applyDeepLink();
     } else {
       state.watchlistIds = new Set();
+      state.likedIds = new Set();
       state.myProfile = null;
       state.topMovieIds = new Set();
       showAuthScreen();

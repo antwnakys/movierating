@@ -189,3 +189,24 @@ create policy "Send recommendations" on public.recommendations for insert
 drop policy if exists "Remove recommendations" on public.recommendations;
 create policy "Remove recommendations" on public.recommendations for delete
   using (auth.uid() = to_user or auth.uid() = from_user);
+
+-- ============================================================
+--  Likes — public "liked" movies, shown on profiles
+-- ============================================================
+create table if not exists public.likes (
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  movie_id     bigint not null,
+  movie_title  text not null,
+  movie_poster text,
+  movie_year   text,
+  created_at   timestamptz not null default now(),
+  primary key (user_id, movie_id)
+);
+create index if not exists likes_user_idx on public.likes (user_id);
+alter table public.likes enable row level security;
+drop policy if exists "Likes are public" on public.likes;
+create policy "Likes are public" on public.likes for select using (true);
+drop policy if exists "Users like as themselves" on public.likes;
+create policy "Users like as themselves" on public.likes for insert with check (auth.uid() = user_id);
+drop policy if exists "Users unlike as themselves" on public.likes;
+create policy "Users unlike as themselves" on public.likes for delete using (auth.uid() = user_id);

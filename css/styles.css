@@ -45,6 +45,7 @@ html, body {
 .btn-watch { background: var(--bg-3); color: var(--text); border: 1px solid var(--line); }
 .btn-watch:hover { border-color: var(--accent); }
 .btn-watch.active { background: rgba(79, 140, 255, 0.15); border-color: var(--accent); color: var(--accent); }
+.btn-watch.liked { background: rgba(255, 93, 93, 0.15); border-color: var(--danger); color: var(--danger); }
 
 /* ---------- Top bar ---------- */
 .topbar {
