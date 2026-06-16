@@ -5,11 +5,13 @@
 -- ============================================================
 
 -- 1) Allow half-star (0.5-step) ratings ----------------------
-alter table public.ratings
-  alter column rating type numeric(2,1);
-
+-- Drop the old 1-5 integer check FIRST so it can't block the type change,
+-- then cast explicitly (USING), then add the half-step check.
 alter table public.ratings
   drop constraint if exists ratings_rating_check;
+
+alter table public.ratings
+  alter column rating type numeric(2,1) using rating::numeric(2,1);
 
 alter table public.ratings
   add constraint ratings_rating_check
