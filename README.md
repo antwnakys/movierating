@@ -93,6 +93,11 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
 - **Profiles** — avatar upload, bio, a **Top 5** movies showcase, and a
   scrollable **Watched** history
 - **Follow** other users; click any name/avatar to open their profile
+- **Recommend** a movie to people you're connected with; see "Recommended
+  for you" on your profile
+- **Activity feed** shows follower counts and a one-tap Follow button
+- **Shareable links** for movies and profiles (`?movie=` / `?user=`)
+- **Mobile-friendly** responsive layout with a device-choice welcome screen
 - Optional written **reviews** + a community **per-aspect breakdown**
 - **Watchlist** — save movies to watch later (private to each user)
 - **Community average** computed from all users, alongside the TMDB score
@@ -103,5 +108,6 @@ Run these once each in **Supabase → SQL Editor** (safe to re-run), in order:
 1. [`supabase-migration.sql`](supabase-migration.sql) — half-star ratings + `watchlist` table
 2. [`supabase-migration-2.sql`](supabase-migration-2.sql) — detailed (multi-aspect) ratings
 3. [`supabase-migration-3.sql`](supabase-migration-3.sql) — profiles, follows, avatar storage
+4. [`supabase-migration-4.sql`](supabase-migration-4.sql) — movie recommendations
 
 Fresh installs using [`supabase-schema.sql`](supabase-schema.sql) already include everything.

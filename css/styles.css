@@ -354,6 +354,42 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 .person-row:hover { background: var(--bg-3); }
 .person-row-name { font-weight: 600; font-size: 15px; }
 
+/* Activity feed: follower count + inline follow button */
+.feed-stats { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.feed-followers { font-size: 12px; color: var(--muted); }
+.btn-follow {
+  font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+  border-radius: 999px; padding: 4px 14px;
+}
+.btn-follow:hover { background: rgba(79, 140, 255, 0.12); }
+.btn-follow.active { background: var(--bg-3); border-color: var(--line); color: var(--muted); }
+
+/* Recommend picker (sheet) */
+.recommend-note { padding: 4px 24px 12px; }
+.recommend-note input {
+  width: 100%; background: var(--bg-3); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 11px 14px; font: inherit; outline: none;
+}
+.recommend-note input:focus { border-color: var(--accent); }
+.rec-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; }
+.rec-row:hover { background: var(--bg-3); }
+.rec-row .person-row-name { flex: 1; }
+.rec-send { padding: 7px 16px; font-size: 13px; }
+
+/* "Recommended for you" cards on a profile */
+.recs-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.rec-card { width: 130px; position: relative; cursor: pointer; }
+.rec-card .poster { width: 130px; aspect-ratio: 2/3; object-fit: cover; border-radius: 10px; transition: transform 0.12s; }
+.rec-card:hover .poster { transform: translateY(-4px); }
+.rec-dismiss {
+  position: absolute; top: 6px; right: 6px; z-index: 2; width: 26px; height: 26px;
+  border-radius: 999px; border: none; background: rgba(0,0,0,0.6); color: #fff; cursor: pointer;
+}
+.rec-card-title { font-size: 13px; font-weight: 600; margin-top: 8px; line-height: 1.3; }
+.rec-card-from { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rec-card-note { font-size: 12px; color: #c7d0dc; font-style: italic; margin-top: 4px; line-height: 1.3; }
+
 .reviews { padding: 8px 24px 28px; }
 .reviews h3 { font-size: 15px; margin: 16px 0 12px; }
 .review {
@@ -424,6 +460,7 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 .device-mobile .app { padding: 16px 12px 72px; }
 .device-mobile .section-head h2 { font-size: 19px; }
 .device-mobile .grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 12px; }
+.device-mobile .grid.list { grid-template-columns: 1fr; gap: 0; } /* activity feed stays vertical */
 
 /* Movie detail modal → full screen */
 .device-mobile .modal { padding: 0; }
@@ -456,5 +493,5 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 .device-mobile .people-list-head { padding: 20px 18px 10px; }
 
 @media (max-width: 380px) {
-  .device-mobile .grid { grid-template-columns: repeat(2, 1fr); }
+  .device-mobile .grid:not(.list) { grid-template-columns: repeat(2, 1fr); }
 }

@@ -372,11 +372,15 @@ function timeAgo(iso) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-function activityItem(r) {
+function activityItem(r, followers = 0, amFollowing = false) {
   const initials = (r.user_name || "?").slice(0, 1).toUpperCase();
   const poster = r.movie_poster
     ? `<img class="feed-poster" loading="lazy" src="${TMDB.IMG}${r.movie_poster}" alt="" />`
     : `<div class="feed-poster"></div>`;
+  const isSelf = r.user_id === state.user.id;
+  const followBtn = isSelf
+    ? ""
+    : `<button class="btn-follow ${amFollowing ? "active" : ""}" data-uid="${r.user_id}">${amFollowing ? "Following ✓" : "Follow"}</button>`;
   const item = el(`
     <div class="feed-item">
       <div class="review-avatar author-link" data-uid="${r.user_id}">${esc(initials)}</div>
@@ -389,6 +393,10 @@ function activityItem(r) {
           <span class="review-date">${timeAgo(r.updated_at)}</span>
         </div>
         ${r.review ? `<div class="feed-review">“${esc(r.review)}”</div>` : ""}
+        <div class="feed-stats">
+          <span class="feed-followers">${followers} follower${followers === 1 ? "" : "s"}</span>
+          ${followBtn}
+        </div>
       </div>
       ${poster}
     </div>
@@ -400,6 +408,20 @@ function activityItem(r) {
       openProfile(r.user_id);
     })
   );
+  const fb = item.querySelector(".btn-follow");
+  if (fb)
+    fb.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const active = fb.classList.contains("active");
+      fb.disabled = true;
+      const { error } = active
+        ? await DB.unfollow(state.user.id, r.user_id)
+        : await DB.follow(state.user.id, r.user_id);
+      fb.disabled = false;
+      if (error) return;
+      fb.classList.toggle("active");
+      fb.textContent = active ? "Follow" : "Following ✓";
+    });
   return item;
 }
 
@@ -434,8 +456,16 @@ async function loadActivity(scope = activityScope) {
           : "No activity yet — be the first to rate a movie!";
       return;
     }
+    const ids = [...new Set(rows.map((r) => r.user_id))];
+    const [followerMap, myFollowing] = await Promise.all([
+      DB.getFollowerCounts(ids).catch(() => ({})),
+      DB.getFollowingIds(state.user.id).catch(() => []),
+    ]);
+    const followingSet = new Set(myFollowing);
     $("#gridStatus").textContent = "";
-    rows.forEach((r) => grid.appendChild(activityItem(r)));
+    rows.forEach((r) =>
+      grid.appendChild(activityItem(r, followerMap[r.user_id] || 0, followingSet.has(r.user_id)))
+    );
   } catch (err) {
     $("#gridStatus").textContent = "⚠️ " + err.message;
   }
@@ -499,8 +529,44 @@ async function openProfile(userId) {
       isSelf ? Promise.resolve(false) : DB.isFollowing(state.user.id, userId),
     ]);
     renderProfile(userId, profile, counts, following, isSelf);
+    if (isSelf) loadIncomingRecs(userId);
   } catch (err) {
     view.innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
+function recCard(r) {
+  const poster = r.movie_poster
+    ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${r.movie_poster}" alt="${esc(r.movie_title)}" />`
+    : `<div class="poster placeholder">${esc(r.movie_title)}</div>`;
+  return `<div class="rec-card" data-mid="${r.movie_id}" data-id="${r.id}">
+    <button class="rec-dismiss" title="Dismiss">✕</button>
+    ${poster}
+    <div class="rec-card-title">${esc(r.movie_title)}</div>
+    <div class="rec-card-from">from ${esc(r.from_name || "someone")}</div>
+    ${r.note ? `<div class="rec-card-note">“${esc(r.note)}”</div>` : ""}
+  </div>`;
+}
+
+async function loadIncomingRecs(userId) {
+  try {
+    const recs = await DB.getIncomingRecommendations(userId);
+    const sec = $("#recsSection");
+    if (!sec || !recs.length) return;
+    sec.innerHTML = `<div class="profile-section">
+      <h3>Recommended for you <span class="muted small">— from people you're connected with</span></h3>
+      <div class="recs-row">${recs.map(recCard).join("")}</div>
+    </div>`;
+    sec.querySelectorAll(".rec-card").forEach((c) => {
+      c.addEventListener("click", () => openMovie(Number(c.dataset.mid)));
+      c.querySelector(".rec-dismiss")?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await DB.dismissRecommendation(c.dataset.id);
+        c.remove();
+      });
+    });
+  } catch {
+    /* recommendations table may not exist yet — skip */
   }
 }
 
@@ -533,6 +599,8 @@ function renderProfile(userId, profile, counts, following, isSelf) {
         </div>
       </div>
     </div>
+
+    ${isSelf ? '<div id="recsSection"></div>' : ""}
 
     <div class="profile-section">
       <h3>Top 5 ${isSelf ? '<span class="muted small">— add from any movie’s page</span>' : ""}</h3>
@@ -797,6 +865,62 @@ function closeModal() {
   document.body.style.overflow = "";
 }
 
+// ---- Sheet overlay (recommend picker) ----
+function openSheet(html) {
+  $("#sheetBody").innerHTML = html;
+  $("#sheet").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+function closeSheet() {
+  $("#sheet").classList.add("hidden");
+  if ($("#modal").classList.contains("hidden")) document.body.style.overflow = "";
+}
+
+function recRow(p) {
+  const name = p.display_name || "User";
+  return `<div class="rec-row" data-uid="${p.id}">
+    ${avatarHTML(p, name)}
+    <span class="person-row-name">${esc(name)}</span>
+    <button class="btn btn-primary rec-send">Send</button>
+  </div>`;
+}
+
+async function openRecommendPicker(movie) {
+  const head = `<div class="people-list-head"><h2>Recommend “${esc(movie.title)}”</h2></div>
+    <div class="recommend-note"><input id="recNote" maxlength="140" placeholder="Add a note (optional)…" /></div>`;
+  openSheet(head + `<div class="grid-status">Loading your people…</div>`);
+  try {
+    const [following, followers] = await Promise.all([
+      DB.getFollowing(state.user.id),
+      DB.getFollowers(state.user.id),
+    ]);
+    const map = new Map();
+    [...following, ...followers].forEach((p) => map.set(p.id, p));
+    const people = [...map.values()];
+    const list = people.length
+      ? `<div class="people-list">${people.map(recRow).join("")}</div>`
+      : '<p class="empty" style="padding:20px 24px">Follow someone (or get a follower) first — then you can recommend movies to them.</p>';
+    $("#sheetBody").innerHTML = head + list;
+    $("#sheetBody")
+      .querySelectorAll(".rec-row")
+      .forEach((row) =>
+        row.querySelector(".rec-send").addEventListener("click", async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          const { error } = await DB.recommendMovie({
+            from: state.user,
+            to: row.dataset.uid,
+            movie,
+            note: $("#recNote").value,
+          });
+          btn.textContent = error ? "⚠️" : "Sent ✓";
+        })
+      );
+  } catch (err) {
+    $("#sheetBody").innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
 function communityAvg(ratings) {
   if (!ratings.length) return null;
   return ratings.reduce((s, r) => s + Number(r.rating), 0) / ratings.length;
@@ -891,6 +1015,7 @@ function renderModal() {
         <div class="detail-actions">
           <button class="btn btn-watch" id="watchToggle"></button>
           <button class="btn btn-watch" id="top5Toggle"></button>
+          <button class="btn btn-watch" id="recommendMovie">📨 Recommend</button>
           <button class="btn btn-watch" id="shareMovie">↗ Share</button>
         </div>
       </div>
@@ -992,6 +1117,7 @@ function renderModal() {
   $("#shareMovie").addEventListener("click", (e) =>
     shareLink(shareBase() + "?movie=" + modalState.movie.id, e.currentTarget)
   );
+  $("#recommendMovie").addEventListener("click", () => openRecommendPicker(modalState.movie));
   $("#saveRating").addEventListener("click", saveRating);
   if (myExisting) $("#deleteRating").addEventListener("click", removeRating);
   $("#modalBody")
@@ -1214,8 +1340,13 @@ function setupAppUI() {
   $("#modal").querySelectorAll("[data-close]").forEach((n) =>
     n.addEventListener("click", closeModal)
   );
+  $("#sheet").querySelectorAll("[data-sheet-close]").forEach((n) =>
+    n.addEventListener("click", closeSheet)
+  );
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !$("#modal").classList.contains("hidden")) closeModal();
+    if (e.key !== "Escape") return;
+    if (!$("#sheet").classList.contains("hidden")) closeSheet();
+    else if (!$("#modal").classList.contains("hidden")) closeModal();
   });
 }
 

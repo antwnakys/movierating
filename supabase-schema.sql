@@ -160,3 +160,32 @@ create policy "Users update own avatar" on storage.objects for update
 drop policy if exists "Users delete own avatar" on storage.objects;
 create policy "Users delete own avatar" on storage.objects for delete
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ============================================================
+--  Recommendations — recommend a movie to a connection
+-- ============================================================
+create table if not exists public.recommendations (
+  id           uuid primary key default gen_random_uuid(),
+  from_user    uuid not null references auth.users(id) on delete cascade,
+  from_name    text,
+  to_user      uuid not null references auth.users(id) on delete cascade,
+  movie_id     bigint not null,
+  movie_title  text not null,
+  movie_poster text,
+  movie_year   text,
+  note         text,
+  created_at   timestamptz not null default now(),
+  unique (from_user, to_user, movie_id),
+  check (from_user <> to_user)
+);
+create index if not exists recommendations_to_idx on public.recommendations (to_user);
+alter table public.recommendations enable row level security;
+drop policy if exists "See own recommendations" on public.recommendations;
+create policy "See own recommendations" on public.recommendations for select
+  using (auth.uid() = to_user or auth.uid() = from_user);
+drop policy if exists "Send recommendations" on public.recommendations;
+create policy "Send recommendations" on public.recommendations for insert
+  with check (auth.uid() = from_user);
+drop policy if exists "Remove recommendations" on public.recommendations;
+create policy "Remove recommendations" on public.recommendations for delete
+  using (auth.uid() = to_user or auth.uid() = from_user);

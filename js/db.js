@@ -210,6 +210,23 @@ async function profilesByIds(ids) {
   return data || [];
 }
 
+// Map of userId -> follower count, for a set of users (one query).
+export async function getFollowerCounts(ids) {
+  if (!ids.length) return {};
+  const { data, error } = await supabase.from("follows").select("following_id").in("following_id", ids);
+  if (error) throw error;
+  const map = {};
+  (data || []).forEach((r) => (map[r.following_id] = (map[r.following_id] || 0) + 1));
+  return map;
+}
+
+// Just the ids this user follows (for quick "am I following?" checks).
+export async function getFollowingIds(userId) {
+  const { data, error } = await supabase.from("follows").select("following_id").eq("follower_id", userId);
+  if (error) throw error;
+  return (data || []).map((r) => r.following_id);
+}
+
 export async function getFollowCounts(userId) {
   const followers = await supabase
     .from("follows")
@@ -220,6 +237,39 @@ export async function getFollowCounts(userId) {
     .select("*", { count: "exact", head: true })
     .eq("follower_id", userId);
   return { followers: followers.count || 0, following: following.count || 0 };
+}
+
+// ---- Recommendations ----
+
+export async function recommendMovie({ from, to, movie, note }) {
+  return supabase.from("recommendations").upsert(
+    {
+      from_user: from.id,
+      from_name: from.user_metadata?.display_name || from.email.split("@")[0],
+      to_user: to,
+      movie_id: movie.id,
+      movie_title: movie.title,
+      movie_poster: movie.poster_path || null,
+      movie_year: (movie.release_date || "").slice(0, 4) || null,
+      note: note?.trim() || null,
+      created_at: new Date().toISOString(),
+    },
+    { onConflict: "from_user,to_user,movie_id" }
+  );
+}
+
+export async function getIncomingRecommendations(userId) {
+  const { data, error } = await supabase
+    .from("recommendations")
+    .select("*")
+    .eq("to_user", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function dismissRecommendation(id) {
+  return supabase.from("recommendations").delete().eq("id", id);
 }
 
 // ---- Watchlist ----
