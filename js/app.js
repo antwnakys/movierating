@@ -442,6 +442,20 @@ function renderModal() {
   const aspectAvgs = communityAspectAverages(modalState.ratings);
   const hasAspectData = Object.values(aspectAvgs).some((v) => v != null);
 
+  const crew = m.credits?.crew || [];
+  const cast = m.credits?.cast || [];
+  const directors = crew.filter((c) => c.job === "Director").map((c) => c.name);
+  const castCard = (c) => {
+    const photo = c.profile_path
+      ? `<img class="cast-photo" loading="lazy" src="${TMDB.IMG_PROFILE}${c.profile_path}" alt="${esc(c.name)}" />`
+      : `<div class="cast-photo placeholder">${esc(c.name.slice(0, 1))}</div>`;
+    return `<div class="cast-card">
+      ${photo}
+      <div class="cast-name">${esc(c.name)}</div>
+      <div class="cast-char">${esc(c.character || "")}</div>
+    </div>`;
+  };
+
   $("#modalBody").innerHTML = `
     <div class="detail-hero">${backdrop}</div>
     <div class="detail-main">
@@ -452,12 +466,22 @@ function renderModal() {
           ${TMDB.year(m.release_date) || ""} ${m.runtime ? "· " + m.runtime + " min" : ""}
           ${m.genres?.length ? "· " + m.genres.map((g) => esc(g.name)).join(", ") : ""}
         </div>
+        ${directors.length ? `<div class="detail-director">🎬 Directed by <b>${directors.map(esc).join(", ")}</b></div>` : ""}
         <p class="detail-overview">${esc(m.overview || "No synopsis available.")}</p>
         <div class="detail-actions">
           <button class="btn btn-watch" id="watchToggle"></button>
         </div>
       </div>
     </div>
+
+    ${
+      cast.length
+        ? `<div class="cast">
+            <h3>Cast</h3>
+            <div class="cast-row">${cast.slice(0, 15).map(castCard).join("")}</div>
+          </div>`
+        : ""
+    }
 
     <div class="score-row">
       <div class="score-box">
@@ -488,10 +512,14 @@ function renderModal() {
       <div class="rate-head">
         <h3>${myExisting ? "Your rating" : "Rate this movie"}</h3>
         <div class="mode-toggle">
-          <button class="mode-btn ${modalState.myMode === "simple" ? "active" : ""}" data-mode="simple">Simple</button>
-          <button class="mode-btn ${modalState.myMode === "detailed" ? "active" : ""}" data-mode="detailed">Detailed</button>
+          <button class="mode-btn ${modalState.myMode === "simple" ? "active" : ""}" data-mode="simple">★ Simple</button>
+          <button class="mode-btn ${modalState.myMode === "detailed" ? "active" : ""}" data-mode="detailed">🎬 By category</button>
         </div>
       </div>
+
+      <p class="rate-hint ${modalState.myMode === "detailed" ? "hidden" : ""}" id="rateHint">
+        Want to rate <b>movie, directing, acting, music & scenario</b> separately? Tap <b>🎬 By category</b>.
+      </p>
 
       <div id="simpleRate" class="${modalState.myMode === "simple" ? "" : "hidden"}">
         <div class="rate-line">
@@ -548,6 +576,7 @@ function wireModeToggle() {
       document.querySelectorAll(".mode-btn").forEach((b) => b.classList.toggle("active", b === btn));
       $("#simpleRate").classList.toggle("hidden", modalState.myMode !== "simple");
       $("#detailedRate").classList.toggle("hidden", modalState.myMode !== "detailed");
+      $("#rateHint")?.classList.toggle("hidden", modalState.myMode !== "simple");
     });
   });
 }

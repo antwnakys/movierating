@@ -3,6 +3,7 @@ import { CONFIG } from "./config.js";
 const BASE = "https://api.themoviedb.org/3";
 export const IMG = "https://image.tmdb.org/t/p/w500";
 export const IMG_BACKDROP = "https://image.tmdb.org/t/p/w1280";
+export const IMG_PROFILE = "https://image.tmdb.org/t/p/w185";
 
 async function tmdb(path, params = {}) {
   const url = new URL(BASE + path);
