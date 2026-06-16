@@ -272,6 +272,18 @@ export async function dismissRecommendation(id) {
   return supabase.from("recommendations").delete().eq("id", id);
 }
 
+// Count incoming recommendations newer than `since` (ISO string or null).
+export async function countNewRecommendations(userId, since) {
+  let q = supabase
+    .from("recommendations")
+    .select("*", { count: "exact", head: true })
+    .eq("to_user", userId);
+  if (since) q = q.gt("created_at", since);
+  const { count, error } = await q;
+  if (error) throw error;
+  return count || 0;
+}
+
 // ---- Watchlist ----
 
 export async function addToWatchlist({ movie, user }) {

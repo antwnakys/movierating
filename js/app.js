@@ -529,7 +529,10 @@ async function openProfile(userId) {
       isSelf ? Promise.resolve(false) : DB.isFollowing(state.user.id, userId),
     ]);
     renderProfile(userId, profile, counts, following, isSelf);
-    if (isSelf) loadIncomingRecs(userId);
+    if (isSelf) {
+      loadIncomingRecs(userId);
+      markRecsSeen();
+    }
   } catch (err) {
     view.innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
   }
@@ -546,6 +549,26 @@ function recCard(r) {
     <div class="rec-card-from">from ${esc(r.from_name || "someone")}</div>
     ${r.note ? `<div class="rec-card-note">“${esc(r.note)}”</div>` : ""}
   </div>`;
+}
+
+// Show a badge with the count of recommendations received since last viewed.
+async function refreshRecBadge() {
+  try {
+    const since = localStorage.getItem("cinerate_recs_seen");
+    const n = await DB.countNewRecommendations(state.user.id, since);
+    const badge = $("#recBadge");
+    badge.textContent = n > 9 ? "9+" : n;
+    badge.classList.toggle("hidden", n === 0);
+    $("#navToggle").classList.toggle("has-badge", n > 0);
+  } catch {
+    /* recommendations table may not exist yet */
+  }
+}
+
+function markRecsSeen() {
+  localStorage.setItem("cinerate_recs_seen", new Date().toISOString());
+  $("#recBadge")?.classList.add("hidden");
+  $("#navToggle")?.classList.remove("has-badge");
 }
 
 async function loadIncomingRecs(userId) {
@@ -1373,6 +1396,7 @@ function boot() {
       loadPopular();
       refreshWatchlistIds();
       loadMyProfileState();
+      refreshRecBadge();
       applyDeepLink();
     } else {
       state.watchlistIds = new Set();

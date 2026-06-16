@@ -436,7 +436,21 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
    ============================================================ */
 .nav-toggle {
   display: none; background: transparent; border: none; color: var(--text);
-  font-size: 24px; cursor: pointer; padding: 4px 8px; line-height: 1;
+  font-size: 24px; cursor: pointer; padding: 4px 8px; line-height: 1; position: relative;
+}
+/* red dot on the hamburger when there are new recommendations */
+.nav-toggle.has-badge::after {
+  content: ""; position: absolute; top: 2px; right: 4px;
+  width: 9px; height: 9px; border-radius: 999px; background: var(--danger);
+  border: 2px solid var(--bg);
+}
+
+/* count badge on the "My profile" button */
+.nav-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px;
+  background: var(--danger); color: #fff; border-radius: 999px;
+  font-size: 11px; font-weight: 700; vertical-align: middle;
 }
 
 /* ============================================================
