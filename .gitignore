@@ -1,0 +1,11 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Note: js/config.js is intentionally NOT ignored.
+# Supabase anon key + TMDB v3 key are public client keys,
+# protected by Row Level Security. They must ship with the
+# static site for GitHub Pages to work.
