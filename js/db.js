@@ -180,6 +180,36 @@ export async function isFollowing(followerId, followingId) {
   return (count || 0) > 0;
 }
 
+// Profiles of everyone who follows `userId`.
+export async function getFollowers(userId) {
+  const { data, error } = await supabase
+    .from("follows")
+    .select("follower_id")
+    .eq("following_id", userId);
+  if (error) throw error;
+  return profilesByIds((data || []).map((r) => r.follower_id));
+}
+
+// Profiles of everyone `userId` follows.
+export async function getFollowing(userId) {
+  const { data, error } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", userId);
+  if (error) throw error;
+  return profilesByIds((data || []).map((r) => r.following_id));
+}
+
+async function profilesByIds(ids) {
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, display_name, avatar_url")
+    .in("id", ids);
+  if (error) throw error;
+  return data || [];
+}
+
 export async function getFollowCounts(userId) {
   const followers = await supabase
     .from("follows")

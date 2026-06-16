@@ -460,8 +460,8 @@ function renderProfile(userId, profile, counts, following, isSelf) {
       <div class="profile-info">
         <h2 class="profile-name">${esc(name)}</h2>
         <div class="profile-stats">
-          <span><b id="followerCount">${counts.followers}</b> followers</span>
-          <span><b>${counts.following}</b> following</span>
+          <span class="stat-link" id="followersLink"><b id="followerCount">${counts.followers}</b> followers</span>
+          <span class="stat-link" id="followingLink"><b>${counts.following}</b> following</span>
         </div>
         <p class="profile-bio" id="profileBio">${bio ? esc(bio) : `<span class="muted">${isSelf ? "Add a bio…" : ""}</span>`}</p>
         <div class="profile-actions">
@@ -470,6 +470,7 @@ function renderProfile(userId, profile, counts, following, isSelf) {
               ? '<button class="btn btn-ghost" id="editProfileBtn">Edit bio</button>'
               : `<button class="btn ${following ? "btn-watch active" : "btn-primary"}" id="followBtn">${following ? "Following ✓" : "Follow"}</button>`
           }
+          <button class="btn btn-ghost" id="shareProfile">↗ Share</button>
         </div>
       </div>
     </div>
@@ -504,6 +505,11 @@ function renderProfile(userId, profile, counts, following, isSelf) {
   } else {
     $("#followBtn").addEventListener("click", () => toggleFollow(userId));
   }
+  $("#followersLink").addEventListener("click", () => openPeopleList(name + " · Followers", userId, "followers"));
+  $("#followingLink").addEventListener("click", () => openPeopleList(name + " · Following", userId, "following"));
+  $("#shareProfile").addEventListener("click", (e) =>
+    shareLink(shareBase() + "?user=" + userId, e.currentTarget)
+  );
   view.querySelectorAll(".top5-card").forEach((c) =>
     c.addEventListener("click", () => openMovie(Number(c.dataset.mid)))
   );
@@ -618,6 +624,77 @@ async function removeTopMovie(id) {
   state.myProfile.top_movies = top;
   state.topMovieIds = new Set(top.map((x) => x.id));
   openProfile(state.user.id);
+}
+
+// =====================================================
+//  FOLLOWERS / FOLLOWING LIST (in the modal)
+// =====================================================
+function personRow(p) {
+  const name = p.display_name || "User";
+  return `<div class="person-row" data-uid="${p.id}">
+    ${avatarHTML(p, name)}
+    <span class="person-row-name">${esc(name)}</span>
+  </div>`;
+}
+
+async function openPeopleList(title, userId, kind) {
+  const modal = $("#modal");
+  modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  $("#modalBody").innerHTML = `<div class="people-list-head"><h2>${esc(title)}</h2></div><div class="grid-status">Loading…</div>`;
+  try {
+    const people = kind === "followers" ? await DB.getFollowers(userId) : await DB.getFollowing(userId);
+    const body = people.length
+      ? `<div class="people-list">${people.map(personRow).join("")}</div>`
+      : '<p class="empty" style="padding:20px 24px">Nobody yet.</p>';
+    $("#modalBody").innerHTML = `<div class="people-list-head"><h2>${esc(title)}</h2></div>${body}`;
+    $("#modalBody")
+      .querySelectorAll(".person-row")
+      .forEach((r) =>
+        r.addEventListener("click", () => {
+          closeModal();
+          openProfile(r.dataset.uid);
+        })
+      );
+  } catch (err) {
+    $("#modalBody").innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
+// =====================================================
+//  SHARING (deep links)
+// =====================================================
+const shareBase = () => location.origin + location.pathname;
+
+async function shareLink(url, btn) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ url });
+    } catch {
+      /* user cancelled */
+    }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    const old = btn.textContent;
+    btn.textContent = "✓ Link copied!";
+    setTimeout(() => (btn.textContent = old), 1500);
+  } catch {
+    prompt("Copy this link:", url);
+  }
+}
+
+// On first load after sign-in, honour ?movie=ID or ?user=ID in the URL.
+let deepLinkHandled = false;
+function applyDeepLink() {
+  if (deepLinkHandled) return;
+  deepLinkHandled = true;
+  const params = new URLSearchParams(location.search);
+  const movieId = params.get("movie");
+  const userId = params.get("user");
+  if (movieId) openMovie(Number(movieId));
+  else if (userId) openProfile(userId);
 }
 
 // =====================================================
@@ -755,6 +832,7 @@ function renderModal() {
         <div class="detail-actions">
           <button class="btn btn-watch" id="watchToggle"></button>
           <button class="btn btn-watch" id="top5Toggle"></button>
+          <button class="btn btn-watch" id="shareMovie">↗ Share</button>
         </div>
       </div>
     </div>
@@ -852,6 +930,9 @@ function renderModal() {
   updateTop5Btn();
   $("#watchToggle").addEventListener("click", toggleWatch);
   $("#top5Toggle").addEventListener("click", toggleTop5);
+  $("#shareMovie").addEventListener("click", (e) =>
+    shareLink(shareBase() + "?movie=" + modalState.movie.id, e.currentTarget)
+  );
   $("#saveRating").addEventListener("click", saveRating);
   if (myExisting) $("#deleteRating").addEventListener("click", removeRating);
   $("#modalBody")
@@ -1101,6 +1182,7 @@ function boot() {
       loadPopular();
       refreshWatchlistIds();
       loadMyProfileState();
+      applyDeepLink();
     } else {
       state.watchlistIds = new Set();
       state.myProfile = null;
