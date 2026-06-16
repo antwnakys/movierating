@@ -152,6 +152,7 @@ function renderMovies(movies, append) {
 async function loadPopular(page = 1) {
   state.mode = "popular";
   state.page = page;
+  if (page === 1) clearPeople();
   $("#sectionTitle").textContent = "Popular right now";
   await runLoad(() => TMDB.getPopular(page), page === 1);
 }
@@ -162,6 +163,34 @@ async function loadSearch(query, page = 1) {
   state.page = page;
   $("#sectionTitle").textContent = `Results for “${query}”`;
   await runLoad(() => TMDB.searchMovies(query, page), page === 1);
+  if (page === 1) renderPeopleResults(query); // people above the movie grid
+}
+
+const clearPeople = () => ($("#peopleResults").innerHTML = "");
+
+function personCard(p) {
+  const name = p.display_name || "User";
+  const card = el(`
+    <div class="person-card">
+      ${avatarHTML(p, name)}
+      <div class="person-name">${esc(name)}</div>
+    </div>`);
+  card.addEventListener("click", () => openProfile(p.id));
+  return card;
+}
+
+async function renderPeopleResults(query) {
+  const box = $("#peopleResults");
+  box.innerHTML = "";
+  try {
+    const people = await DB.searchProfiles(query, 12);
+    if (!people.length) return;
+    box.innerHTML = `<h3 class="people-head">People</h3><div class="people-row"></div>`;
+    const row = box.querySelector(".people-row");
+    people.forEach((p) => row.appendChild(personCard(p)));
+  } catch {
+    /* profiles table missing or query failed — just skip people */
+  }
 }
 
 async function runLoad(fetcher, reset) {
@@ -191,6 +220,7 @@ async function runLoad(fetcher, reset) {
 async function loadMine() {
   state.mode = "mine";
   showBrowse();
+  clearPeople();
   $("#sectionTitle").textContent = "My ratings";
   $("#loadMore").classList.add("hidden");
   $("#grid").classList.remove("list");
@@ -225,6 +255,7 @@ async function loadMine() {
 async function loadWatchlist() {
   state.mode = "watch";
   showBrowse();
+  clearPeople();
   $("#sectionTitle").textContent = "Your watchlist";
   $("#loadMore").classList.add("hidden");
   $("#grid").classList.remove("list");
@@ -317,6 +348,7 @@ async function loadActivity(scope = activityScope) {
   activityScope = scope;
   state.mode = "activity";
   showBrowse();
+  clearPeople();
   $("#loadMore").classList.add("hidden");
   $("#sectionTitle").innerHTML = `Activity
     <span class="scope-toggle">

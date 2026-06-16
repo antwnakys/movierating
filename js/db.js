@@ -126,6 +126,18 @@ export async function getProfile(userId) {
   return data;
 }
 
+// Search users by display name (for the search bar).
+export async function searchProfiles(query, limit = 12) {
+  const term = query.replace(/[%_]/g, "\\$&"); // escape ilike wildcards
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, display_name, avatar_url")
+    .ilike("display_name", `%${term}%`)
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
 export async function updateProfile(userId, fields) {
   return supabase
     .from("profiles")
