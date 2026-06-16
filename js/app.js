@@ -16,11 +16,12 @@ const esc = (s) =>
 
 const state = {
   user: null,
-  mode: "popular", // popular | search | mine
+  mode: "popular", // popular | search | mine | watch
   query: "",
   page: 1,
   totalPages: 1,
   loading: false,
+  watchlistIds: new Set(),
 };
 
 // =====================================================
@@ -71,6 +72,7 @@ function setupAuthUI() {
   });
 
   $("#signOutBtn").addEventListener("click", () => DB.signOut());
+  $("#watchlistBtn").addEventListener("click", () => loadWatchlist());
   $("#myRatingsBtn").addEventListener("click", () => loadMine());
   $("#brandHome").addEventListener("click", (e) => {
     e.preventDefault();
@@ -200,6 +202,49 @@ async function loadMine() {
   }
 }
 
+async function loadWatchlist() {
+  state.mode = "watch";
+  $("#sectionTitle").textContent = "Your watchlist";
+  $("#loadMore").classList.add("hidden");
+  $("#grid").innerHTML = "";
+  $("#gridStatus").textContent = "Loading…";
+  try {
+    const rows = await DB.getWatchlist(state.user.id);
+    state.watchlistIds = new Set(rows.map((r) => r.movie_id));
+    if (!rows.length) {
+      $("#gridStatus").textContent = 'Your watchlist is empty. Open a movie and tap "Add to watchlist".';
+      return;
+    }
+    $("#gridStatus").textContent = "";
+    rows.forEach((r) => {
+      const m = {
+        id: r.movie_id,
+        title: r.movie_title,
+        poster_path: r.movie_poster,
+        release_date: r.movie_year || "",
+        vote_average: null,
+      };
+      const card = movieCard(m);
+      card.querySelector(".card-meta").innerHTML =
+        `<span>${esc(r.movie_year || "—")}</span><span class="badge-star">🔖 Saved</span>`;
+      $("#grid").appendChild(card);
+    });
+  } catch (err) {
+    $("#gridStatus").textContent = "⚠️ " + err.message;
+  }
+}
+
+// Load just the movie ids on the user's watchlist (so the modal toggle
+// shows the right state without opening the watchlist view).
+async function refreshWatchlistIds() {
+  try {
+    const rows = await DB.getWatchlist(state.user.id);
+    state.watchlistIds = new Set(rows.map((r) => r.movie_id));
+  } catch {
+    /* non-fatal */
+  }
+}
+
 // =====================================================
 //  MOVIE DETAIL MODAL
 // =====================================================
@@ -235,10 +280,22 @@ function communityAvg(ratings) {
   return ratings.reduce((s, r) => s + r.rating, 0) / ratings.length;
 }
 
-function starRow(value, max = 5) {
-  let out = "";
-  for (let i = 1; i <= max; i++) out += `<span class="star ${i <= value ? "on" : ""}" data-v="${i}">★</span>`;
-  return out;
+// Display-only fractional stars (supports half steps, e.g. 3.5).
+function starsDisplay(value, sizeClass = "") {
+  const pct = (Math.max(0, Math.min(5, Number(value) || 0)) / 5) * 100;
+  return `<span class="star-rate ${sizeClass}">
+    <span class="layer bg">★★★★★</span>
+    <span class="layer fill" style="width:${pct}%">★★★★★</span>
+  </span>`;
+}
+
+// Interactive star widget for picking a rating in 0.5 steps.
+function starsInput(value) {
+  const pct = ((Number(value) || 0) / 5) * 100;
+  return `<span class="star-rate input" id="starInput">
+    <span class="layer bg">★★★★★</span>
+    <span class="layer fill" id="starFill" style="width:${pct}%">★★★★★</span>
+  </span>`;
 }
 
 function renderModal() {
@@ -265,6 +322,9 @@ function renderModal() {
           ${m.genres?.length ? "· " + m.genres.map((g) => esc(g.name)).join(", ") : ""}
         </div>
         <p class="detail-overview">${esc(m.overview || "No synopsis available.")}</p>
+        <div class="detail-actions">
+          <button class="btn btn-watch" id="watchToggle"></button>
+        </div>
       </div>
     </div>
 
@@ -281,7 +341,10 @@ function renderModal() {
 
     <div class="rate-box">
       <h3>${myExisting ? "Your rating" : "Rate this movie"}</h3>
-      <div class="stars" id="starInput">${starRow(modalState.myRating)}</div>
+      <div class="rate-line">
+        ${starsInput(modalState.myRating)}
+        <span class="rate-readout" id="rateReadout">${modalState.myRating ? Number(modalState.myRating).toFixed(1) : "—"}</span>
+      </div>
       <textarea id="reviewInput" placeholder="Add a review (optional)">${esc(myExisting?.review || "")}</textarea>
       <div class="rate-actions">
         <button class="btn btn-primary" id="saveRating">${myExisting ? "Update rating" : "Submit rating"}</button>
@@ -301,8 +364,43 @@ function renderModal() {
   `;
 
   wireStars();
+  updateWatchBtn();
+  $("#watchToggle").addEventListener("click", toggleWatch);
   $("#saveRating").addEventListener("click", saveRating);
   if (myExisting) $("#deleteRating").addEventListener("click", removeRating);
+}
+
+function updateWatchBtn() {
+  const btn = $("#watchToggle");
+  if (!btn) return;
+  const inList = state.watchlistIds.has(modalState.movie.id);
+  btn.textContent = inList ? "✓ In your watchlist" : "＋ Add to watchlist";
+  btn.classList.toggle("active", inList);
+}
+
+async function toggleWatch() {
+  const m = modalState.movie;
+  const btn = $("#watchToggle");
+  const inList = state.watchlistIds.has(m.id);
+  btn.disabled = true;
+  try {
+    if (inList) {
+      const { error } = await DB.removeFromWatchlist(state.user.id, m.id);
+      if (error) throw error;
+      state.watchlistIds.delete(m.id);
+    } else {
+      const { error } = await DB.addToWatchlist({ movie: m, user: state.user });
+      if (error) throw error;
+      state.watchlistIds.add(m.id);
+    }
+  } catch (err) {
+    btn.textContent = "⚠️ " + err.message;
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  updateWatchBtn();
+  if (state.mode === "watch") loadWatchlist(); // keep the watchlist view in sync
 }
 
 function reviewItem(r) {
@@ -314,7 +412,7 @@ function reviewItem(r) {
       <div class="review-content">
         <div class="review-head">
           <span class="review-name">${esc(r.user_name || "Anonymous")}</span>
-          <span class="review-stars">${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</span>
+          ${starsDisplay(r.rating, "sm")}
           <span class="review-date">${date}</span>
         </div>
         <div class="review-text">${esc(r.review)}</div>
@@ -323,14 +421,34 @@ function reviewItem(r) {
 }
 
 function wireStars() {
-  const container = $("#starInput");
-  container.querySelectorAll(".star").forEach((s) => {
-    s.addEventListener("click", () => {
-      modalState.myRating = Number(s.dataset.v);
-      container.innerHTML = starRow(modalState.myRating);
-      wireStars();
-    });
+  const widget = $("#starInput");
+  const fill = $("#starFill");
+  const readout = $("#rateReadout");
+
+  const valFromEvent = (e) => {
+    const rect = widget.getBoundingClientRect();
+    const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+    const x = clientX - rect.left;
+    const v = Math.ceil((x / rect.width) * 10) / 2; // snap to 0.5 steps
+    return Math.min(5, Math.max(0.5, v));
+  };
+  const show = (v) => {
+    fill.style.width = (v / 5) * 100 + "%";
+    readout.textContent = v.toFixed(1);
+  };
+
+  widget.addEventListener("mousemove", (e) => show(valFromEvent(e)));
+  widget.addEventListener("mouseleave", () => {
+    fill.style.width = ((modalState.myRating || 0) / 5) * 100 + "%";
+    readout.textContent = modalState.myRating ? Number(modalState.myRating).toFixed(1) : "—";
   });
+  const commit = (e) => {
+    e.preventDefault();
+    modalState.myRating = valFromEvent(e);
+    show(modalState.myRating);
+  };
+  widget.addEventListener("click", commit);
+  widget.addEventListener("touchstart", commit, { passive: false });
 }
 
 async function saveRating() {
@@ -410,7 +528,9 @@ function boot() {
     if (state.user) {
       showApp();
       loadPopular();
+      refreshWatchlistIds();
     } else {
+      state.watchlistIds = new Set();
       showAuthScreen();
     }
   });

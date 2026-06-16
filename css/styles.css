@@ -42,6 +42,9 @@ html, body {
 .btn-block { width: 100%; }
 .btn-danger { background: transparent; color: var(--danger); }
 .btn-danger:hover { background: rgba(255, 93, 93, 0.12); }
+.btn-watch { background: var(--bg-3); color: var(--text); border: 1px solid var(--line); }
+.btn-watch:hover { border-color: var(--accent); }
+.btn-watch.active { background: rgba(79, 140, 255, 0.15); border-color: var(--accent); color: var(--accent); }
 
 /* ---------- Top bar ---------- */
 .topbar {
@@ -220,10 +223,23 @@ html, body {
 
 .rate-box { margin: 0 24px 8px; padding: 18px; background: var(--bg-3); border-radius: var(--radius); }
 .rate-box h3 { margin: 0 0 12px; font-size: 15px; }
-.stars { display: flex; gap: 4px; font-size: 32px; cursor: pointer; user-select: none; }
-.stars .star { color: #3a4252; transition: color 0.1s, transform 0.1s; }
-.stars .star:hover { transform: scale(1.15); }
-.stars .star.on { color: var(--gold); }
+
+/* Fractional (half-step) star widget — a gold layer clipped over a grey one */
+.star-rate { position: relative; display: inline-block; line-height: 1; font-size: 32px; }
+.star-rate .layer { white-space: nowrap; letter-spacing: 2px; }
+.star-rate .bg { color: #3a4252; }
+.star-rate .fill {
+  color: var(--gold);
+  position: absolute; top: 0; left: 0;
+  overflow: hidden; width: 0;
+  pointer-events: none;
+}
+.star-rate.input { cursor: pointer; }
+.rate-line { display: flex; align-items: center; }
+.rate-readout { margin-left: 14px; font-weight: 700; color: var(--gold); font-size: 18px; }
+.star-rate.sm { font-size: 15px; }
+.star-rate.sm .layer { letter-spacing: 1px; }
+.detail-actions { margin-top: 16px; }
 .rate-box textarea {
   width: 100%; margin-top: 12px; background: var(--bg-2); border: 1px solid var(--line);
   color: var(--text); border-radius: 8px; padding: 10px 12px; font: inherit; resize: vertical; min-height: 64px; outline: none;

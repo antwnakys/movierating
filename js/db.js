@@ -78,3 +78,31 @@ export async function getUserRatings(userId) {
   if (error) throw error;
   return data || [];
 }
+
+// ---- Watchlist ----
+
+export async function addToWatchlist({ movie, user }) {
+  const row = {
+    user_id: user.id,
+    movie_id: movie.id,
+    movie_title: movie.title,
+    movie_poster: movie.poster_path || null,
+    movie_year: (movie.release_date || "").slice(0, 4) || null,
+  };
+  // upsert so re-adding never errors on the unique constraint
+  return supabase.from("watchlist").upsert(row, { onConflict: "user_id,movie_id" });
+}
+
+export async function removeFromWatchlist(userId, movieId) {
+  return supabase.from("watchlist").delete().eq("user_id", userId).eq("movie_id", movieId);
+}
+
+export async function getWatchlist(userId) {
+  const { data, error } = await supabase
+    .from("watchlist")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}

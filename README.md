@@ -78,13 +78,22 @@ js/config.js          # ← your 3 keys go here
 js/tmdb.js            # TMDB API calls (popular / search / details)
 js/db.js              # Supabase auth + ratings CRUD
 js/app.js             # all UI logic
-supabase-schema.sql   # database table + RLS policies
+supabase-schema.sql   # full database schema + RLS (fresh installs)
+supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
 ```
 
 ## ✨ Features
 - Email/password **sign up & sign in** (whole app is gated behind auth)
 - Search **any** movie or browse what's popular
-- **1–5 star** ratings + optional written reviews
+- **Half-star precision** — rate from 0.5 to 5.0 in 0.5 steps (e.g. 3.5)
+- Optional written **reviews**
+- **Watchlist** — save movies to watch later (private to each user)
 - **Community average** computed from all users, alongside the TMDB score
-- **"My ratings"** view of everything you've rated
+- **"My ratings"** and **"Watchlist"** views
 - Update or remove your rating any time
+
+## 🔄 Already deployed? Run the migration
+If you set up CineRate before the watchlist / half-star update, run
+[`supabase-migration.sql`](supabase-migration.sql) once in **Supabase → SQL Editor**.
+It widens ratings to half-steps and creates the `watchlist` table. Fresh installs
+using [`supabase-schema.sql`](supabase-schema.sql) already include everything.
