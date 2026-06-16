@@ -188,7 +188,8 @@ function movieCard(m) {
     ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${m.poster_path}" alt="${esc(m.title)}" />`
     : `<div class="poster placeholder">${esc(m.title)}</div>`;
   const card = el(`
-    <div class="card">
+    <div class="card" data-mid="${m.id}">
+      <span class="like-badge hidden"><span class="heart">♥</span> <span class="lb-n"></span></span>
       ${poster}
       <div class="card-body">
         <div class="card-title">${esc(m.title)}</div>
@@ -207,6 +208,25 @@ function renderMovies(movies, append) {
   const grid = $("#grid");
   if (!append) grid.innerHTML = "";
   movies.forEach((m) => grid.appendChild(movieCard(m)));
+  decorateLikeCounts(movies);
+}
+
+// Fill in the site-wide like count badge on freshly rendered browse cards.
+async function decorateLikeCounts(movies) {
+  try {
+    const counts = await DB.getLikeCounts(movies.map((m) => m.id));
+    movies.forEach((m) => {
+      const n = counts[m.id];
+      if (!n) return;
+      const badge = document.querySelector(`#grid .card[data-mid="${m.id}"] .like-badge`);
+      if (badge) {
+        badge.querySelector(".lb-n").textContent = n;
+        badge.classList.remove("hidden");
+      }
+    });
+  } catch {
+    /* likes table missing — skip badges */
+  }
 }
 
 async function loadPopular(page = 1) {
@@ -870,7 +890,7 @@ function applyDeepLink() {
 // =====================================================
 //  MOVIE DETAIL MODAL
 // =====================================================
-let modalState = { movie: null, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [] };
+let modalState = { movie: null, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [], likeCount: 0 };
 
 async function openMovie(id) {
   const modal = $("#modal");
@@ -879,12 +899,14 @@ async function openMovie(id) {
   document.body.style.overflow = "hidden";
 
   try {
-    const [movie, ratings] = await Promise.all([
+    const [movie, ratings, likeCount] = await Promise.all([
       TMDB.getMovie(id),
       DB.getMovieRatings(id).catch(() => []),
+      DB.getMovieLikeCount(id).catch(() => 0),
     ]);
     modalState.movie = movie;
     modalState.ratings = ratings;
+    modalState.likeCount = likeCount;
     const mine = ratings.find((r) => r.user_id === state.user.id);
     modalState.myRating = mine ? Number(mine.rating) : 0;
     modalState.myMode = mine?.mode || "simple";
@@ -1083,6 +1105,10 @@ function renderModal() {
         <div class="score-num"><span class="star">★</span> ${m.vote_average ? m.vote_average.toFixed(1) : "–"}<span style="font-size:14px;color:var(--muted)">/10</span></div>
         <div class="score-label">TMDB score</div>
       </div>
+      <div class="score-box">
+        <div class="score-num" id="likeCountNum"><span class="heart">♥</span> ${modalState.likeCount}</div>
+        <div class="score-label">Likes</div>
+      </div>
     </div>
 
     ${
@@ -1199,6 +1225,9 @@ async function toggleLike() {
   }
   if (liked) state.likedIds.delete(m.id);
   else state.likedIds.add(m.id);
+  modalState.likeCount = Math.max(0, modalState.likeCount + (liked ? -1 : 1));
+  const cnt = $("#likeCountNum");
+  if (cnt) cnt.innerHTML = `<span class="heart">♥</span> ${modalState.likeCount}`;
   updateLikeBtn();
 }
 

@@ -170,7 +170,14 @@ html, body {
   cursor: pointer;
   transition: transform 0.12s, border-color 0.12s;
 }
+.card { position: relative; }
 .card:hover { transform: translateY(-4px); border-color: var(--accent); }
+.like-badge {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  background: rgba(0, 0, 0, 0.65); color: #fff; border-radius: 999px;
+  padding: 3px 9px; font-size: 12px; font-weight: 700;
+}
+.heart { color: var(--danger); }
 .poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; background: var(--bg-3); }
 .poster.placeholder {
   display: flex; align-items: center; justify-content: center;

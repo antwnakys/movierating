@@ -11,7 +11,8 @@
       "Bash(curl -s \"http://localhost:8765/js/db.js\")",
       "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Activity-feed follower counts + movie recommendations *)",
       "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Notification badge for new recommendations *)",
-      "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Add liking movies, shown on profiles *)"
+      "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Add liking movies, shown on profiles *)",
+      "Bash(git -c user.email=antonsig08@gmail.com -c user.name=antwnakys commit -q -m 'Show site-wide like counts on movies *)"
     ]
   }
 }

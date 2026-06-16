@@ -145,6 +145,26 @@ export async function getLikedIds(userId) {
   return (data || []).map((r) => r.movie_id);
 }
 
+// Total likes for one movie (across all users).
+export async function getMovieLikeCount(movieId) {
+  const { count, error } = await supabase
+    .from("likes")
+    .select("*", { count: "exact", head: true })
+    .eq("movie_id", movieId);
+  if (error) throw error;
+  return count || 0;
+}
+
+// Map of movie_id -> like count for a batch of movies (one query).
+export async function getLikeCounts(movieIds) {
+  if (!movieIds.length) return {};
+  const { data, error } = await supabase.from("likes").select("movie_id").in("movie_id", movieIds);
+  if (error) throw error;
+  const map = {};
+  (data || []).forEach((r) => (map[r.movie_id] = (map[r.movie_id] || 0) + 1));
+  return map;
+}
+
 // ---- Profiles ----
 
 // Create the profile row on first sign-in (won't overwrite an existing one).
