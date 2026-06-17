@@ -178,6 +178,20 @@ html, body {
   padding: 3px 9px; font-size: 12px; font-weight: 700;
 }
 .heart { color: var(--danger); }
+.media-tag {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  background: rgba(79, 140, 255, 0.92); color: #fff; border-radius: 6px;
+  padding: 2px 7px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
+}
+
+/* Movies / Series browse toggle */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.browse-toggle { display: inline-flex; background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
+.browse-btn {
+  border: none; background: transparent; color: var(--muted); font: inherit; font-weight: 600;
+  font-size: 14px; padding: 7px 16px; border-radius: 999px; cursor: pointer;
+}
+.browse-btn.active { background: var(--gold); color: #1a1a1a; }
 .poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; background: var(--bg-3); }
 .poster.placeholder {
   display: flex; align-items: center; justify-content: center;

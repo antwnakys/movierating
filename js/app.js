@@ -16,7 +16,8 @@ const esc = (s) =>
 
 const state = {
   user: null,
-  mode: "popular", // popular | search | mine | watch | activity
+  mode: "popular", // popular | search | mine | watch | activity | profile
+  browseType: "movie", // movie | tv (for the Popular browse toggle)
   query: "",
   page: 1,
   totalPages: 1,
@@ -37,6 +38,31 @@ const ASPECTS = [
 ];
 const emptyAspects = () => ({ movie: 0, directing: 0, acting: 0, music: 0, scenario: 0 });
 const num = (v) => (v == null ? 0 : Number(v));
+
+// --- Media-type ID namespacing ---------------------------------------------
+// We store movies & series in the same `movie_id` columns. To avoid collisions
+// (TMDB movie 550 ≠ tv 550) we offset TV ids into a separate range. This keeps
+// the whole feature in the frontend — no schema changes.
+const TV_OFFSET = 1_000_000_000;
+const encodeId = (id, mt) => (mt === "tv" ? Number(id) + TV_OFFSET : Number(id));
+const decodeType = (sid) => (Number(sid) >= TV_OFFSET ? "tv" : "movie");
+const decodeRealId = (sid) => (Number(sid) >= TV_OFFSET ? Number(sid) - TV_OFFSET : Number(sid));
+// A DB-storable record (encoded id + display fields) from a TMDB item.
+const storable = (m, mt) => ({
+  id: encodeId(m.id, mt),
+  title: m.title || m.name,
+  poster_path: m.poster_path ?? null,
+  release_date: m.release_date || m.first_air_date || "",
+});
+// Build a uniform card/open model from a stored DB row (movie_id is encoded).
+const cardFromRow = (r) => ({
+  id: decodeRealId(r.movie_id),
+  media_type: decodeType(r.movie_id),
+  title: r.movie_title,
+  poster_path: r.movie_poster,
+  release_date: r.movie_year || "",
+  vote_average: null,
+});
 
 // =====================================================
 //  DEVICE MODE (mobile vs desktop layout)
@@ -187,8 +213,10 @@ function movieCard(m) {
   const poster = m.poster_path
     ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${m.poster_path}" alt="${esc(m.title)}" />`
     : `<div class="poster placeholder">${esc(m.title)}</div>`;
+  const mt = m.media_type || "movie";
   const card = el(`
-    <div class="card" data-mid="${m.id}">
+    <div class="card" data-mid="${m.id}" data-mt="${mt}">
+      ${mt === "tv" ? '<span class="media-tag">TV</span>' : ""}
       <span class="like-badge hidden"><span class="heart">♥</span> <span class="lb-n"></span></span>
       ${poster}
       <div class="card-body">
@@ -200,7 +228,7 @@ function movieCard(m) {
       </div>
     </div>
   `);
-  card.addEventListener("click", () => openMovie(m.id));
+  card.addEventListener("click", () => openMovie(m.id, mt));
   return card;
 }
 
@@ -214,11 +242,13 @@ function renderMovies(movies, append) {
 // Fill in the site-wide like count badge on freshly rendered browse cards.
 async function decorateLikeCounts(movies) {
   try {
-    const counts = await DB.getLikeCounts(movies.map((m) => m.id));
+    const counts = await DB.getLikeCounts(movies.map((m) => encodeId(m.id, m.media_type || "movie")));
     movies.forEach((m) => {
-      const n = counts[m.id];
+      const n = counts[encodeId(m.id, m.media_type || "movie")];
       if (!n) return;
-      const badge = document.querySelector(`#grid .card[data-mid="${m.id}"] .like-badge`);
+      const badge = document.querySelector(
+        `#grid .card[data-mid="${m.id}"][data-mt="${m.media_type || "movie"}"] .like-badge`
+      );
       if (badge) {
         badge.querySelector(".lb-n").textContent = n;
         badge.classList.remove("hidden");
@@ -233,8 +263,12 @@ async function loadPopular(page = 1) {
   state.mode = "popular";
   state.page = page;
   if (page === 1) clearPeople();
-  $("#sectionTitle").textContent = "Popular right now";
-  await runLoad(() => TMDB.getPopular(page), page === 1);
+  const tv = state.browseType === "tv";
+  $("#sectionTitle").textContent = tv ? "Popular series" : "Popular movies";
+  await runLoad(async () => {
+    const data = tv ? await TMDB.getPopularTV(page) : await TMDB.getPopular(page);
+    return { ...data, results: (data.results || []).map((it) => TMDB.normalizeItem(it, state.browseType)) };
+  }, page === 1);
 }
 
 async function loadSearch(query, page = 1) {
@@ -242,8 +276,14 @@ async function loadSearch(query, page = 1) {
   state.query = query;
   state.page = page;
   $("#sectionTitle").textContent = `Results for “${query}”`;
-  await runLoad(() => TMDB.searchMovies(query, page), page === 1);
-  if (page === 1) renderPeopleResults(query); // people above the movie grid
+  await runLoad(async () => {
+    const data = await TMDB.searchMulti(query, page);
+    const results = (data.results || [])
+      .filter((it) => it.media_type === "movie" || it.media_type === "tv")
+      .map((it) => TMDB.normalizeItem(it));
+    return { ...data, results };
+  }, page === 1);
+  if (page === 1) renderPeopleResults(query); // people above the results grid
 }
 
 const clearPeople = () => ($("#peopleResults").innerHTML = "");
@@ -314,14 +354,7 @@ async function loadMine() {
     }
     $("#gridStatus").textContent = "";
     rows.forEach((r) => {
-      const m = {
-        id: r.movie_id,
-        title: r.movie_title,
-        poster_path: r.movie_poster,
-        release_date: r.movie_year || "",
-        vote_average: null,
-      };
-      const card = movieCard(m);
+      const card = movieCard(cardFromRow(r));
       // Overlay the user's own star rating
       const meta = card.querySelector(".card-meta");
       meta.innerHTML = `<span>${esc(r.movie_year || "—")}</span><span class="badge-star">★ ${r.rating}/5 (you)</span>`;
@@ -350,14 +383,7 @@ async function loadWatchlist() {
     }
     $("#gridStatus").textContent = "";
     rows.forEach((r) => {
-      const m = {
-        id: r.movie_id,
-        title: r.movie_title,
-        poster_path: r.movie_poster,
-        release_date: r.movie_year || "",
-        vote_average: null,
-      };
-      const card = movieCard(m);
+      const card = movieCard(cardFromRow(r));
       card.querySelector(".card-meta").innerHTML =
         `<span>${esc(r.movie_year || "—")}</span><span class="badge-star">🔖 Saved</span>`;
       $("#grid").appendChild(card);
@@ -422,7 +448,7 @@ function activityItem(r, followers = 0, amFollowing = false) {
       ${poster}
     </div>
   `);
-  item.addEventListener("click", () => openMovie(r.movie_id));
+  item.addEventListener("click", () => openMovie(decodeRealId(r.movie_id), decodeType(r.movie_id)));
   item.querySelectorAll(".author-link").forEach((a) =>
     a.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -523,12 +549,15 @@ function avatarHTML(profile, name, cls = "") {
 }
 
 function top5Card(mv, i, isSelf) {
+  const realId = decodeRealId(mv.id);
+  const mt = mv.media_type || decodeType(mv.id);
   const poster = mv.poster
     ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${mv.poster}" alt="${esc(mv.title)}" />`
     : `<div class="poster placeholder">${esc(mv.title)}</div>`;
-  return `<div class="top5-card" data-mid="${mv.id}">
+  return `<div class="top5-card" data-mid="${realId}" data-mt="${mt}">
     <span class="top5-rank">${i + 1}</span>
     ${isSelf ? `<button class="top5-remove" data-id="${mv.id}" title="Remove">✕</button>` : ""}
+    ${mt === "tv" ? '<span class="media-tag">TV</span>' : ""}
     ${poster}
     <div class="top5-title">${esc(mv.title)}</div>
   </div>`;
@@ -561,11 +590,14 @@ async function openProfile(userId) {
 }
 
 function recCard(r) {
+  const realId = decodeRealId(r.movie_id);
+  const mt = decodeType(r.movie_id);
   const poster = r.movie_poster
     ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${r.movie_poster}" alt="${esc(r.movie_title)}" />`
     : `<div class="poster placeholder">${esc(r.movie_title)}</div>`;
-  return `<div class="rec-card" data-mid="${r.movie_id}" data-id="${r.id}">
+  return `<div class="rec-card" data-mid="${realId}" data-mt="${mt}" data-id="${r.id}">
     <button class="rec-dismiss" title="Dismiss">✕</button>
+    ${mt === "tv" ? '<span class="media-tag">TV</span>' : ""}
     ${poster}
     <div class="rec-card-title">${esc(r.movie_title)}</div>
     <div class="rec-card-from">from ${esc(r.from_name || "someone")}</div>
@@ -603,7 +635,7 @@ async function loadIncomingRecs(userId) {
       <div class="recs-row">${recs.map(recCard).join("")}</div>
     </div>`;
     sec.querySelectorAll(".rec-card").forEach((c) => {
-      c.addEventListener("click", () => openMovie(Number(c.dataset.mid)));
+      c.addEventListener("click", () => openMovie(Number(c.dataset.mid), c.dataset.mt));
       c.querySelector(".rec-dismiss")?.addEventListener("click", async (e) => {
         e.stopPropagation();
         await DB.dismissRecommendation(c.dataset.id);
@@ -616,10 +648,12 @@ async function loadIncomingRecs(userId) {
 }
 
 function likeCard(l) {
+  const realId = decodeRealId(l.movie_id);
+  const mt = decodeType(l.movie_id);
   const poster = l.movie_poster
     ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${l.movie_poster}" alt="${esc(l.movie_title)}" />`
     : `<div class="poster placeholder">${esc(l.movie_title)}</div>`;
-  return `<div class="top5-card" data-mid="${l.movie_id}">${poster}<div class="top5-title">${esc(l.movie_title)}</div></div>`;
+  return `<div class="top5-card" data-mid="${realId}" data-mt="${mt}">${mt === "tv" ? '<span class="media-tag">TV</span>' : ""}${poster}<div class="top5-title">${esc(l.movie_title)}</div></div>`;
 }
 
 function renderProfile(userId, profile, counts, following, isSelf, likes = []) {
@@ -701,7 +735,7 @@ function renderProfile(userId, profile, counts, following, isSelf, likes = []) {
     shareLink(shareBase() + "?user=" + userId, e.currentTarget)
   );
   view.querySelectorAll(".top5-card").forEach((c) =>
-    c.addEventListener("click", () => openMovie(Number(c.dataset.mid)))
+    c.addEventListener("click", () => openMovie(Number(c.dataset.mid), c.dataset.mt))
   );
 
   initWatched(userId);
@@ -724,14 +758,7 @@ async function initWatched(userId) {
     try {
       const rows = await DB.getUserRatingsPage(userId, from, size);
       rows.forEach((r) => {
-        const m = {
-          id: r.movie_id,
-          title: r.movie_title,
-          poster_path: r.movie_poster,
-          release_date: r.movie_year || "",
-          vote_average: null,
-        };
-        const card = movieCard(m);
+        const card = movieCard(cardFromRow(r));
         card.querySelector(".card-meta").innerHTML =
           `<span>${esc(r.movie_year || "—")}</span><span class="badge-star">★ ${Number(r.rating).toFixed(1)}</span>`;
         grid.appendChild(card);
@@ -882,29 +909,40 @@ function applyDeepLink() {
   deepLinkHandled = true;
   const params = new URLSearchParams(location.search);
   const movieId = params.get("movie");
+  const tvId = params.get("tv");
   const userId = params.get("user");
-  if (movieId) openMovie(Number(movieId));
+  if (movieId) openMovie(Number(movieId), "movie");
+  else if (tvId) openMovie(Number(tvId), "tv");
   else if (userId) openProfile(userId);
 }
 
 // =====================================================
 //  MOVIE DETAIL MODAL
 // =====================================================
-let modalState = { movie: null, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [], likeCount: 0 };
+let modalState = { movie: null, mediaType: "movie", storeId: 0, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [], likeCount: 0 };
 
-async function openMovie(id) {
+async function openMovie(id, mediaType = "movie") {
   const modal = $("#modal");
   modal.classList.remove("hidden");
   $("#modalBody").innerHTML = `<div class="grid-status">Loading…</div>`;
   document.body.style.overflow = "hidden";
+  const storeId = encodeId(id, mediaType);
 
   try {
-    const [movie, ratings, likeCount] = await Promise.all([
-      TMDB.getMovie(id),
-      DB.getMovieRatings(id).catch(() => []),
-      DB.getMovieLikeCount(id).catch(() => 0),
+    const [raw, ratings, likeCount] = await Promise.all([
+      mediaType === "tv" ? TMDB.getTV(id) : TMDB.getMovie(id),
+      DB.getMovieRatings(storeId).catch(() => []),
+      DB.getMovieLikeCount(storeId).catch(() => 0),
     ]);
+    const movie = {
+      ...raw,
+      media_type: mediaType,
+      title: raw.title || raw.name,
+      release_date: raw.release_date || raw.first_air_date || "",
+    };
     modalState.movie = movie;
+    modalState.mediaType = mediaType;
+    modalState.storeId = storeId;
     modalState.ratings = ratings;
     modalState.likeCount = likeCount;
     const mine = ratings.find((r) => r.user_id === state.user.id);
@@ -975,7 +1013,7 @@ async function openRecommendPicker(movie) {
           const { error } = await DB.recommendMovie({
             from: state.user,
             to: row.dataset.uid,
-            movie,
+            movie: storable(movie, movie.media_type || "movie"),
             note: $("#recNote").value,
           });
           btn.textContent = error ? "⚠️" : "Sent ✓";
@@ -1051,9 +1089,20 @@ function renderModal() {
   const aspectAvgs = communityAspectAverages(modalState.ratings);
   const hasAspectData = Object.values(aspectAvgs).some((v) => v != null);
 
+  const isTV = modalState.mediaType === "tv";
   const crew = m.credits?.crew || [];
   const cast = m.credits?.cast || [];
-  const directors = crew.filter((c) => c.job === "Director").map((c) => c.name);
+  const directors = isTV
+    ? (m.created_by || []).map((c) => c.name)
+    : crew.filter((c) => c.job === "Director").map((c) => c.name);
+  const creditLabel = isTV ? "Created by" : "Directed by";
+  const subMeta = isTV
+    ? m.number_of_seasons
+      ? "· " + m.number_of_seasons + " season" + (m.number_of_seasons === 1 ? "" : "s")
+      : ""
+    : m.runtime
+      ? "· " + m.runtime + " min"
+      : "";
   const castCard = (c) => {
     const photo = c.profile_path
       ? `<img class="cast-photo" loading="lazy" src="${TMDB.IMG_PROFILE}${c.profile_path}" alt="${esc(c.name)}" />`
@@ -1072,10 +1121,10 @@ function renderModal() {
       <div class="detail-info">
         <h2>${esc(m.title)}</h2>
         <div class="detail-sub">
-          ${TMDB.year(m.release_date) || ""} ${m.runtime ? "· " + m.runtime + " min" : ""}
+          ${TMDB.year(m.release_date) || ""} ${subMeta}
           ${m.genres?.length ? "· " + m.genres.map((g) => esc(g.name)).join(", ") : ""}
         </div>
-        ${directors.length ? `<div class="detail-director">🎬 Directed by <b>${directors.map(esc).join(", ")}</b></div>` : ""}
+        ${directors.length ? `<div class="detail-director">🎬 ${creditLabel} <b>${directors.map(esc).join(", ")}</b></div>` : ""}
         <p class="detail-overview">${esc(m.overview || "No synopsis available.")}</p>
         <div class="detail-actions">
           <button class="btn btn-watch" id="likeToggle"></button>
@@ -1187,7 +1236,7 @@ function renderModal() {
   $("#watchToggle").addEventListener("click", toggleWatch);
   $("#top5Toggle").addEventListener("click", toggleTop5);
   $("#shareMovie").addEventListener("click", (e) =>
-    shareLink(shareBase() + "?movie=" + modalState.movie.id, e.currentTarget)
+    shareLink(shareBase() + (modalState.mediaType === "tv" ? "?tv=" : "?movie=") + modalState.movie.id, e.currentTarget)
   );
   $("#recommendMovie").addEventListener("click", () => openRecommendPicker(modalState.movie));
   $("#saveRating").addEventListener("click", saveRating);
@@ -1205,26 +1254,26 @@ function renderModal() {
 function updateLikeBtn() {
   const btn = $("#likeToggle");
   if (!btn) return;
-  const liked = state.likedIds.has(modalState.movie.id);
+  const liked = state.likedIds.has(modalState.storeId);
   btn.textContent = liked ? "♥ Liked" : "♡ Like";
   btn.classList.toggle("liked", liked);
 }
 
 async function toggleLike() {
-  const m = modalState.movie;
-  const liked = state.likedIds.has(m.id);
+  const sid = modalState.storeId;
+  const liked = state.likedIds.has(sid);
   const btn = $("#likeToggle");
   btn.disabled = true;
   const { error } = liked
-    ? await DB.unlikeMovie(state.user.id, m.id)
-    : await DB.likeMovie({ movie: m, user: state.user });
+    ? await DB.unlikeMovie(state.user.id, sid)
+    : await DB.likeMovie({ movie: storable(modalState.movie, modalState.mediaType), user: state.user });
   btn.disabled = false;
   if (error) {
     btn.textContent = "⚠️ " + error.message;
     return;
   }
-  if (liked) state.likedIds.delete(m.id);
-  else state.likedIds.add(m.id);
+  if (liked) state.likedIds.delete(sid);
+  else state.likedIds.add(sid);
   modalState.likeCount = Math.max(0, modalState.likeCount + (liked ? -1 : 1));
   const cnt = $("#likeCountNum");
   if (cnt) cnt.innerHTML = `<span class="heart">♥</span> ${modalState.likeCount}`;
@@ -1242,7 +1291,7 @@ async function refreshLikedIds() {
 function updateTop5Btn() {
   const btn = $("#top5Toggle");
   if (!btn) return;
-  const inTop = state.topMovieIds.has(modalState.movie.id);
+  const inTop = state.topMovieIds.has(modalState.storeId);
   const full = state.topMovieIds.size >= 5 && !inTop;
   btn.textContent = inTop ? "★ In your Top 5" : full ? "Top 5 full" : "＋ Add to Top 5";
   btn.classList.toggle("active", inTop);
@@ -1251,14 +1300,16 @@ function updateTop5Btn() {
 
 async function toggleTop5() {
   const m = modalState.movie;
-  const inTop = state.topMovieIds.has(m.id);
+  const sid = modalState.storeId;
+  const inTop = state.topMovieIds.has(sid);
   let top = Array.isArray(state.myProfile?.top_movies) ? [...state.myProfile.top_movies] : [];
   if (inTop) {
-    top = top.filter((x) => x.id !== m.id);
+    top = top.filter((x) => x.id !== sid);
   } else {
     if (top.length >= 5) return;
     top.push({
-      id: m.id,
+      id: sid,
+      media_type: modalState.mediaType,
       title: m.title,
       poster: m.poster_path || null,
       year: (m.release_date || "").slice(0, 4) || null,
@@ -1291,25 +1342,25 @@ function wireModeToggle() {
 function updateWatchBtn() {
   const btn = $("#watchToggle");
   if (!btn) return;
-  const inList = state.watchlistIds.has(modalState.movie.id);
+  const inList = state.watchlistIds.has(modalState.storeId);
   btn.textContent = inList ? "✓ In your watchlist" : "＋ Add to watchlist";
   btn.classList.toggle("active", inList);
 }
 
 async function toggleWatch() {
-  const m = modalState.movie;
+  const sid = modalState.storeId;
   const btn = $("#watchToggle");
-  const inList = state.watchlistIds.has(m.id);
+  const inList = state.watchlistIds.has(sid);
   btn.disabled = true;
   try {
     if (inList) {
-      const { error } = await DB.removeFromWatchlist(state.user.id, m.id);
+      const { error } = await DB.removeFromWatchlist(state.user.id, sid);
       if (error) throw error;
-      state.watchlistIds.delete(m.id);
+      state.watchlistIds.delete(sid);
     } else {
-      const { error } = await DB.addToWatchlist({ movie: m, user: state.user });
+      const { error } = await DB.addToWatchlist({ movie: storable(modalState.movie, modalState.mediaType), user: state.user });
       if (error) throw error;
-      state.watchlistIds.add(m.id);
+      state.watchlistIds.add(sid);
     }
   } catch (err) {
     btn.textContent = "⚠️ " + err.message;
@@ -1400,7 +1451,7 @@ async function saveRating() {
 
   $("#rateStatus").textContent = "Saving…";
   const { error } = await DB.upsertRating({
-    movie: modalState.movie,
+    movie: storable(modalState.movie, modalState.mediaType),
     rating,
     mode,
     aspects,
@@ -1412,12 +1463,12 @@ async function saveRating() {
     return;
   }
   $("#rateStatus").textContent = "Saved!";
-  modalState.ratings = await DB.getMovieRatings(modalState.movie.id);
+  modalState.ratings = await DB.getMovieRatings(modalState.storeId);
   renderModal();
 }
 
 async function removeRating() {
-  const { error } = await DB.deleteRating(state.user.id, modalState.movie.id);
+  const { error } = await DB.deleteRating(state.user.id, modalState.storeId);
   if (error) {
     $("#rateStatus").textContent = "⚠️ " + error.message;
     return;
@@ -1425,7 +1476,7 @@ async function removeRating() {
   modalState.myRating = 0;
   modalState.myMode = "simple";
   modalState.myAspects = emptyAspects();
-  modalState.ratings = await DB.getMovieRatings(modalState.movie.id);
+  modalState.ratings = await DB.getMovieRatings(modalState.storeId);
   renderModal();
 }
 
@@ -1439,6 +1490,15 @@ function setupAppUI() {
     if (q) loadSearch(q);
     else loadPopular();
   });
+
+  document.querySelectorAll(".browse-btn").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.browseType = b.dataset.browse;
+      document.querySelectorAll(".browse-btn").forEach((x) => x.classList.toggle("active", x === b));
+      $("#searchInput").value = "";
+      loadPopular();
+    })
+  );
 
   $("#loadMore").addEventListener("click", () => {
     const next = state.page + 1;

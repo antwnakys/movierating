@@ -97,7 +97,9 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
   for you" on your profile
 - **Activity feed** shows follower counts and a one-tap Follow button
 - **Shareable links** for movies and profiles (`?movie=` / `?user=`)
-- **Like** any movie (♥) — your liked movies show on your public profile
+- **Movies *and* TV series** — browse/search both, rate whole series, with
+  TV-aware details (creators, seasons)
+- **Like** any movie or series (♥) — shown on your public profile
 - **Mobile-friendly** responsive layout with a device-choice welcome screen
 - Optional written **reviews** + a community **per-aspect breakdown**
 - **Watchlist** — save movies to watch later (private to each user)
