@@ -68,13 +68,19 @@ const cardFromRow = (r) => ({
 });
 
 // =====================================================
-//  LAYOUT — the app is always in the (centered) mobile view
+//  LAYOUT — responsive: sidebar desktop / mobile column
 // =====================================================
+function applyDeviceMode() {
+  const mobile = window.innerWidth <= 820;
+  document.body.classList.toggle("device-mobile", mobile);
+  document.body.classList.toggle("device-desktop", !mobile);
+}
+
 function setupDevice() {
-  document.body.classList.add("device-mobile");
-  document.body.classList.remove("device-desktop");
-  $("#deviceScreen")?.remove(); // no device-choice screen anymore
-  $("#viewToggle")?.remove(); // no desktop view to switch to
+  applyDeviceMode();
+  window.addEventListener("resize", applyDeviceMode);
+  $("#deviceScreen")?.remove(); // no device-choice screen
+  $("#viewToggle")?.remove(); // layout follows screen width
 
   // Hamburger menu
   $("#navToggle").addEventListener("click", (e) => {

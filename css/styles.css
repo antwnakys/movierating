@@ -653,3 +653,48 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 @media (max-width: 380px) {
   .device-mobile .grid:not(.list) { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ============================================================
+   DESKTOP LAYOUT (body.device-desktop) — left sidebar + wide grid
+   ============================================================ */
+.device-desktop #topbar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 240px; height: 100vh;
+  border-right: 1px solid var(--line); border-bottom: none; overflow-y: auto;
+  background: var(--bg-2);
+}
+.device-desktop .topbar-inner {
+  flex-direction: column; align-items: stretch; max-width: none; height: 100%;
+  padding: 22px 14px; gap: 6px;
+}
+.device-desktop .brand { font-size: 22px; padding: 0 10px 14px; }
+.device-desktop .search { order: 1; margin-bottom: 10px; }
+.device-desktop .search input { width: 100%; }
+.device-desktop .nav-toggle { display: none; }
+.device-desktop #accountBtn { display: none; }
+.device-desktop #notifBtn { position: absolute; top: 18px; right: 10px; font-size: 18px; }
+.device-desktop #notifMenu { position: fixed; top: 58px; left: 252px; right: auto; }
+.device-desktop .user-menu {
+  order: 2; position: static; display: flex; flex-direction: column; align-items: stretch;
+  gap: 2px; background: none; border: none; box-shadow: none; padding: 0;
+}
+.device-desktop .user-name { padding: 4px 12px 10px; font-size: 13px; }
+.device-desktop .user-menu .btn {
+  text-align: left; width: 100%; padding: 11px 12px; border-radius: 8px; font-size: 15px;
+}
+.device-desktop .user-menu .btn:hover { background: var(--bg-3); color: var(--text); }
+.device-desktop #signOutBtn { margin-top: 8px; border-top: 1px solid var(--line); border-radius: 0; padding-top: 14px; }
+
+/* Main content uses the rest of the screen */
+.device-desktop .app { margin-left: 240px; max-width: none; padding: 30px 44px 80px; }
+.device-desktop .section-head h2 { font-size: 26px; }
+.device-desktop .grid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 24px; }
+.device-desktop #profileView,
+.device-desktop #browseView { max-width: 1500px; }
+
+/* Wider movie detail modal on desktop */
+.device-desktop .modal-panel { max-width: 860px; }
+.device-desktop .detail-backdrop { height: 300px; }
+
+@media (max-width: 1100px) {
+  .device-desktop .app { padding: 24px 28px 70px; }
+}
