@@ -46,10 +46,21 @@ const num = (v) => (v == null ? 0 : Number(v));
 // We store movies & series in the same `movie_id` columns. To avoid collisions
 // (TMDB movie 550 ≠ tv 550) we offset TV ids into a separate range. This keeps
 // the whole feature in the frontend — no schema changes.
-const TV_OFFSET = 1_000_000_000;
+const TV_OFFSET = 1_000_000_000; // 1e9
+const EPISODE_OFFSET = 5_000_000_000_000; // 5e12 — episodes live above movies & series
 const encodeId = (id, mt) => (mt === "tv" ? Number(id) + TV_OFFSET : Number(id));
-const decodeType = (sid) => (Number(sid) >= TV_OFFSET ? "tv" : "movie");
-const decodeRealId = (sid) => (Number(sid) >= TV_OFFSET ? Number(sid) - TV_OFFSET : Number(sid));
+// One series episode → a single stable id: 5e12 + tvId*1e6 + season*1e3 + episode.
+const encodeEpisode = (tvId, season, ep) =>
+  EPISODE_OFFSET + Number(tvId) * 1_000_000 + Number(season) * 1_000 + Number(ep);
+const decodeType = (sid) =>
+  Number(sid) >= EPISODE_OFFSET ? "episode" : Number(sid) >= TV_OFFSET ? "tv" : "movie";
+// Real TMDB id to open: for an episode this is its parent series id.
+const decodeRealId = (sid) => {
+  sid = Number(sid);
+  if (sid >= EPISODE_OFFSET) return Math.floor((sid - EPISODE_OFFSET) / 1_000_000);
+  if (sid >= TV_OFFSET) return sid - TV_OFFSET;
+  return sid;
+};
 // A DB-storable record (encoded id + display fields) from a TMDB item.
 const storable = (m, mt) => ({
   id: encodeId(m.id, mt),
@@ -58,14 +69,17 @@ const storable = (m, mt) => ({
   release_date: m.release_date || m.first_air_date || "",
 });
 // Build a uniform card/open model from a stored DB row (movie_id is encoded).
-const cardFromRow = (r) => ({
-  id: decodeRealId(r.movie_id),
-  media_type: decodeType(r.movie_id),
-  title: r.movie_title,
-  poster_path: r.movie_poster,
-  release_date: r.movie_year || "",
-  vote_average: null,
-});
+const cardFromRow = (r) => {
+  const kind = decodeType(r.movie_id);
+  return {
+    id: decodeRealId(r.movie_id),
+    media_type: kind === "episode" ? "tv" : kind, // episode cards open the parent series
+    title: r.movie_title,
+    poster_path: r.movie_poster,
+    release_date: r.movie_year || "",
+    vote_average: null,
+  };
+};
 
 // =====================================================
 //  LAYOUT — responsive: sidebar desktop / mobile column
@@ -1357,11 +1371,120 @@ function applyDeepLink() {
 }
 
 // =====================================================
+//  PER-EPISODE RATING (series)
+// =====================================================
+function setupEpisodeScope() {
+  document.querySelectorAll(".rate-scope-btn").forEach((b) =>
+    b.addEventListener("click", () => {
+      const ep = b.dataset.rscope === "episodes";
+      document.querySelectorAll(".rate-scope-btn").forEach((x) => x.classList.toggle("active", x === b));
+      $("#seriesRateBox").classList.toggle("hidden", ep);
+      $("#episodeRateBox").classList.toggle("hidden", !ep);
+      if (ep && !$("#episodeList").querySelector(".ep-row")) loadEpisodes($("#seasonSelect").value);
+    })
+  );
+  $("#seasonSelect")?.addEventListener("change", (e) => loadEpisodes(e.target.value));
+}
+
+async function loadEpisodes(seasonNumber) {
+  const tvId = modalState.movie.id;
+  const list = $("#episodeList");
+  list.innerHTML = `<p class="empty">Loading episodes…</p>`;
+  try {
+    const data = await TMDB.getSeason(tvId, seasonNumber);
+    const eps = data.episodes || [];
+    if (!eps.length) {
+      list.innerHTML = `<p class="empty">No episodes found.</p>`;
+      return;
+    }
+    const ids = eps.map((e) => encodeEpisode(tvId, seasonNumber, e.episode_number));
+    let ratings = [];
+    try {
+      ratings = await DB.getRatingsForIds(ids);
+    } catch {
+      /* ignore */
+    }
+    const mine = {};
+    const comm = {};
+    ratings.forEach((r) => {
+      const mid = Number(r.movie_id);
+      (comm[mid] = comm[mid] || []).push(Number(r.rating));
+      if (r.user_id === state.user.id) mine[mid] = Number(r.rating);
+    });
+    list.innerHTML = eps
+      .map((e) => {
+        const eid = encodeEpisode(tvId, seasonNumber, e.episode_number);
+        const my = mine[eid] || 0;
+        const c = comm[eid];
+        const avg = c && c.length ? c.reduce((s, x) => s + x, 0) / c.length : null;
+        return `<div class="ep-row" data-eid="${eid}" data-ep="${e.episode_number}" data-name="${esc(e.name || "")}" data-air="${esc(e.air_date || "")}">
+          <div class="ep-info">
+            <div class="ep-title"><span class="ep-num">E${e.episode_number}</span> ${esc(e.name || "Episode " + e.episode_number)}</div>
+            <div class="ep-sub">${avg != null ? `★ ${avg.toFixed(1)} · ${c.length} rating${c.length === 1 ? "" : "s"}` : '<span class="muted">no ratings yet</span>'}</div>
+          </div>
+          <div class="ep-rate">
+            <span class="star-rate input ep-stars" data-eid="${eid}"><span class="layer bg">★★★★★</span><span class="layer fill" style="width:${(my / 5) * 100}%">★★★★★</span></span>
+            <span class="ep-readout">${my ? my.toFixed(1) : "—"}</span>
+          </div>
+        </div>`;
+      })
+      .join("");
+    wireEpisodeStars(seasonNumber);
+  } catch (err) {
+    list.innerHTML = `<p class="empty">⚠️ ${esc(err.message)}</p>`;
+  }
+}
+
+function wireEpisodeStars(seasonNumber) {
+  const seriesTitle = modalState.movie.title;
+  const poster = modalState.movie.poster_path || null;
+  $("#episodeList")
+    .querySelectorAll(".ep-stars")
+    .forEach((widget) => {
+      const fill = widget.querySelector(".fill");
+      const row = widget.closest(".ep-row");
+      const readout = row.querySelector(".ep-readout");
+      const eid = Number(widget.dataset.eid);
+      let committed = parseFloat(readout.textContent) || 0;
+      const valFromEvent = (e) => {
+        const rect = widget.getBoundingClientRect();
+        const x = (e.touches?.[0]?.clientX ?? e.clientX) - rect.left;
+        return Math.min(5, Math.max(0.5, Math.ceil((x / rect.width) * 10) / 2));
+      };
+      const show = (v) => {
+        fill.style.width = (v / 5) * 100 + "%";
+        readout.textContent = v ? v.toFixed(1) : "—";
+      };
+      widget.addEventListener("mousemove", (e) => show(valFromEvent(e)));
+      widget.addEventListener("mouseleave", () => show(committed));
+      const commit = async (e) => {
+        e.preventDefault();
+        const v = valFromEvent(e);
+        committed = v;
+        fill.style.width = (v / 5) * 100 + "%";
+        readout.textContent = "…";
+        const title = `${seriesTitle} — S${seasonNumber}E${row.dataset.ep}${row.dataset.name ? ": " + row.dataset.name : ""}`;
+        const { error } = await DB.upsertRating({
+          movie: { id: eid, title, poster_path: poster, release_date: row.dataset.air || "" },
+          rating: v,
+          mode: "simple",
+          review: null,
+          user: state.user,
+        });
+        readout.textContent = error ? "⚠️" : v.toFixed(1);
+      };
+      widget.addEventListener("click", commit);
+      widget.addEventListener("touchstart", commit, { passive: false });
+    });
+}
+
+// =====================================================
 //  MOVIE DETAIL MODAL
 // =====================================================
 let modalState = { movie: null, mediaType: "movie", storeId: 0, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [], likeCount: 0, trailer: null };
 
 async function openMovie(id, mediaType = "movie") {
+  if (mediaType === "episode") mediaType = "tv"; // episodes open their parent series
   const modal = $("#modal");
   modal.classList.remove("hidden");
   $("#modalBody").innerHTML = `<div class="grid-status">Loading…</div>`;
@@ -1663,9 +1786,18 @@ function renderModal() {
         : ""
     }
 
-    <div class="rate-box">
+    ${
+      isTV
+        ? `<div class="rate-scope">
+            <button class="rate-scope-btn active" data-rscope="series">★ Whole series</button>
+            <button class="rate-scope-btn" data-rscope="episodes">📺 By episode</button>
+          </div>`
+        : ""
+    }
+
+    <div class="rate-box" id="seriesRateBox">
       <div class="rate-head">
-        <h3>${myExisting ? "Your rating" : "Rate this movie"}</h3>
+        <h3>${myExisting ? "Your rating" : isTV ? "Rate the whole series" : "Rate this movie"}</h3>
         <div class="mode-toggle">
           <button class="mode-btn ${modalState.myMode === "simple" ? "active" : ""}" data-mode="simple">★ Simple</button>
           <button class="mode-btn ${modalState.myMode === "detailed" ? "active" : ""}" data-mode="detailed">🎬 By category</button>
@@ -1706,6 +1838,23 @@ function renderModal() {
       </div>
     </div>
 
+    ${
+      isTV
+        ? `<div class="rate-box hidden" id="episodeRateBox">
+            <div class="rate-head">
+              <h3>Rate episodes</h3>
+              <select id="seasonSelect" class="genre-select">
+                ${(m.seasons || [])
+                  .filter((s) => s.season_number >= 1 && s.episode_count > 0)
+                  .map((s) => `<option value="${s.season_number}">Season ${s.season_number}${s.name && !/^season/i.test(s.name) ? " · " + esc(s.name) : ""} (${s.episode_count})</option>`)
+                  .join("")}
+              </select>
+            </div>
+            <div id="episodeList"><p class="empty">Pick a season to start rating episodes.</p></div>
+          </div>`
+        : ""
+    }
+
     <div class="reviews">
       <h3>Community reviews</h3>
       ${
@@ -1729,6 +1878,7 @@ function renderModal() {
   );
   $("#recommendMovie").addEventListener("click", () => openRecommendPicker(modalState.movie));
   $("#listToggle").addEventListener("click", () => openListPicker());
+  if (modalState.mediaType === "tv") setupEpisodeScope();
   $("#modalBody")
     .querySelectorAll(".sim-card")
     .forEach((c) => c.addEventListener("click", () => openMovie(Number(c.dataset.mid), c.dataset.mt)));

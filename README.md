@@ -97,8 +97,9 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
   for you" on your profile
 - **Activity feed** shows follower counts and a one-tap Follow button
 - **Shareable links** for movies and profiles (`?movie=` / `?user=`)
-- **Movies *and* TV series** — browse/search both, rate whole series, with
-  TV-aware details (creators, seasons)
+- **Movies *and* TV series** — browse/search both, with TV-aware details
+  (creators, seasons). Rate a series **as a whole** or **episode-by-episode**
+  (per-season episode list with its own community averages)
 - **For You** personalized recommendations from your highest-rated titles
 - **Stats / "Your taste"** page: averages, rating distribution, by-decade, top rated
 - **Custom lists** — themed, shareable, public on your profile

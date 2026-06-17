@@ -158,6 +158,15 @@ export async function getLikedIds(userId) {
   return (data || []).map((r) => r.movie_id);
 }
 
+// All ratings (everyone's) for a set of ids — used for per-episode averages
+// and to find the signed-in user's own episode ratings in one query.
+export async function getRatingsForIds(movieIds) {
+  if (!movieIds.length) return [];
+  const { data, error } = await supabase.from("ratings").select("*").in("movie_id", movieIds);
+  if (error) throw error;
+  return data || [];
+}
+
 // Total likes for one movie (across all users).
 export async function getMovieLikeCount(movieId) {
   const { count, error } = await supabase

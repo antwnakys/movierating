@@ -45,6 +45,10 @@ export function getTV(id) {
   return tmdb(`/tv/${id}`, { append_to_response: "credits,videos,recommendations,watch/providers" });
 }
 
+export function getSeason(tvId, seasonNumber) {
+  return tmdb(`/tv/${tvId}/season/${seasonNumber}`);
+}
+
 // "More like this" — same media type as the parent.
 export function recommendations(type, id) {
   return tmdb(`/${type}/${id}/recommendations`);
