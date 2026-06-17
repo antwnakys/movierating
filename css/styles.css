@@ -612,7 +612,7 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 }
 .device-mobile .user-menu.open { display: flex; }
 .device-mobile .user-menu .btn { width: 100%; text-align: left; padding: 13px 14px; font-size: 15px; }
-.device-mobile .user-name { padding: 10px 14px; font-size: 13px; }
+.device-mobile .user-name { display: none; }
 
 .device-mobile .app { padding: 16px 12px 72px; }
 .device-mobile .section-head h2 { font-size: 19px; }
@@ -666,23 +666,23 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
   flex-direction: column; align-items: stretch; max-width: none; height: 100%;
   padding: 22px 14px; gap: 6px;
 }
-.device-desktop .brand { font-size: 22px; padding: 0 10px 14px; }
-.device-desktop .search { order: 1; margin-bottom: 10px; }
+.device-desktop .brand { order: 0; font-size: 22px; padding: 0 10px 14px; }
+.device-desktop .user-name { order: 1; padding: 0 12px 12px; font-size: 16px; font-weight: 700; color: var(--text); white-space: normal; }
+.device-desktop .search { order: 2; flex: 0 0 auto; margin-bottom: 12px; }
 .device-desktop .search input { width: 100%; }
 .device-desktop .nav-toggle { display: none; }
 .device-desktop #accountBtn { display: none; }
 .device-desktop #notifBtn { position: absolute; top: 18px; right: 10px; font-size: 18px; }
 .device-desktop #notifMenu { position: fixed; top: 58px; left: 252px; right: auto; }
 .device-desktop .user-menu {
-  order: 2; position: static; display: flex; flex-direction: column; align-items: stretch;
+  order: 3; flex: 1; position: static; display: flex; flex-direction: column; align-items: stretch;
   gap: 2px; background: none; border: none; box-shadow: none; padding: 0;
 }
-.device-desktop .user-name { padding: 4px 12px 10px; font-size: 13px; }
 .device-desktop .user-menu .btn {
   text-align: left; width: 100%; padding: 11px 12px; border-radius: 8px; font-size: 15px;
 }
 .device-desktop .user-menu .btn:hover { background: var(--bg-3); color: var(--text); }
-.device-desktop #signOutBtn { margin-top: 8px; border-top: 1px solid var(--line); border-radius: 0; padding-top: 14px; }
+.device-desktop #signOutBtn { margin-top: auto; border-top: 1px solid var(--line); border-radius: 0; padding-top: 14px; }
 
 /* Main content uses the rest of the screen */
 .device-desktop .app { margin-left: 240px; max-width: none; padding: 30px 44px 80px; }
