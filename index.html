@@ -41,8 +41,7 @@
       <form id="searchForm" class="search">
         <input id="searchInput" type="search" placeholder="Search movies & people…" autocomplete="off" />
       </form>
-      <button id="notifBtn" class="icon-btn" aria-label="Notifications" title="Notifications">🔔<span id="recBadge" class="nav-badge hidden"></span></button>
-      <div id="notifMenu" class="dropdown-panel hidden"></div>
+      <button id="notifBtn" class="icon-btn" aria-label="Notifications" title="Notifications"><span class="bell-ico">🔔</span><span class="bell-label">Notifications</span><span id="recBadge" class="nav-badge hidden"></span></button>
       <button id="accountBtn" class="avatar-btn" aria-label="My profile" title="My profile"><span id="navAvatar" class="avatar-img sm placeholder">?</span></button>
       <button id="navToggle" class="nav-toggle" aria-label="Menu">☰</button>
       <div class="user-menu" id="navMenu">
@@ -130,6 +129,9 @@
       <div id="modalBody" class="modal-body"></div>
     </div>
   </div>
+
+  <!-- Notifications dropdown (top-level so the sidebar's overflow can't clip it) -->
+  <div id="notifMenu" class="dropdown-panel hidden"></div>
 
   <!-- ============ SHEET (recommend picker, etc.) ============ -->
   <div id="sheet" class="modal hidden">

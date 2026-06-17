@@ -228,6 +228,8 @@ html, body {
   font-size: 20px; cursor: pointer; padding: 6px 8px; border-radius: 8px;
 }
 .icon-btn:hover { background: var(--bg-3); }
+.bell-label { display: none; } /* shown only in the desktop sidebar */
+.device-desktop #notifBtn .nav-badge { margin-left: auto; }
 .icon-btn.has-badge { /* badge shown via .nav-badge child */ }
 .avatar-btn { background: transparent; border: none; cursor: pointer; padding: 2px; border-radius: 999px; }
 .avatar-btn:hover { outline: 2px solid var(--accent); }
@@ -672,10 +674,14 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 .device-desktop .search input { width: 100%; }
 .device-desktop .nav-toggle { display: none; }
 .device-desktop #accountBtn { display: none; }
-.device-desktop #notifBtn { position: absolute; top: 18px; right: 10px; font-size: 18px; }
-.device-desktop #notifMenu { position: fixed; top: 58px; left: 252px; right: auto; }
+.device-desktop #notifBtn {
+  order: 3; position: static; display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; padding: 11px 12px; border-radius: 8px; font-size: 15px; color: var(--muted);
+}
+.device-desktop #notifBtn:hover { background: var(--bg-3); color: var(--text); }
+.device-desktop .bell-label { display: inline; }
 .device-desktop .user-menu {
-  order: 3; flex: 1; position: static; display: flex; flex-direction: column; align-items: stretch;
+  order: 4; flex: 1; position: static; display: flex; flex-direction: column; align-items: stretch;
   gap: 2px; background: none; border: none; box-shadow: none; padding: 0;
 }
 .device-desktop .user-menu .btn {

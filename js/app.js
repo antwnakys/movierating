@@ -1049,6 +1049,18 @@ async function openNotifMenu() {
     menu.classList.add("hidden");
     return;
   }
+  // Anchor the panel to the bell (works for both the sidebar item and mobile icon)
+  const r = $("#notifBtn").getBoundingClientRect();
+  menu.style.position = "fixed";
+  if (document.body.classList.contains("device-desktop")) {
+    menu.style.left = Math.round(r.right + 8) + "px";
+    menu.style.top = Math.round(r.top) + "px";
+    menu.style.right = "auto";
+  } else {
+    menu.style.left = "auto";
+    menu.style.right = "10px";
+    menu.style.top = Math.round(r.bottom + 6) + "px";
+  }
   menu.classList.remove("hidden");
   menu.innerHTML = `<div class="notif-head">Notifications</div><div class="notif-empty">Loading…</div>`;
   try {
