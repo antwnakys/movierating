@@ -40,10 +40,13 @@
       <form id="searchForm" class="search">
         <input id="searchInput" type="search" placeholder="Search movies & people…" autocomplete="off" />
       </form>
+      <button id="notifBtn" class="icon-btn" aria-label="Notifications" title="Notifications">🔔<span id="recBadge" class="nav-badge hidden"></span></button>
+      <div id="notifMenu" class="dropdown-panel hidden"></div>
+      <button id="accountBtn" class="avatar-btn" aria-label="My profile" title="My profile"><span id="navAvatar" class="avatar-img sm placeholder">?</span></button>
       <button id="navToggle" class="nav-toggle" aria-label="Menu">☰</button>
       <div class="user-menu" id="navMenu">
         <span id="userName" class="user-name"></span>
-        <button id="profileBtn" class="btn btn-ghost">My profile <span id="recBadge" class="nav-badge hidden"></span></button>
+        <button id="profileBtn" class="btn btn-ghost">My profile</button>
         <button id="activityBtn" class="btn btn-ghost">Activity</button>
         <button id="watchlistBtn" class="btn btn-ghost">Watchlist</button>
         <button id="myRatingsBtn" class="btn btn-ghost">My ratings</button>
@@ -98,6 +101,16 @@
           <button class="browse-btn" data-browse="tv">📺 Series</button>
         </div>
       </section>
+      <div id="browseControls" class="browse-controls">
+        <div class="cat-pills">
+          <button class="cat-pill active" data-cat="popular">Popular</button>
+          <button class="cat-pill" data-cat="top_rated">Top rated</button>
+          <button class="cat-pill" data-cat="new">New releases</button>
+        </div>
+        <select id="genreSelect" class="genre-select" aria-label="Filter by genre">
+          <option value="">All genres</option>
+        </select>
+      </div>
       <div id="peopleResults" class="people-results"></div>
       <div id="grid" class="grid"></div>
       <div id="gridStatus" class="grid-status"></div>

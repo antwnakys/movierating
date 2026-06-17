@@ -18,6 +18,9 @@ const state = {
   user: null,
   mode: "popular", // popular | search | mine | watch | activity | profile
   browseType: "movie", // movie | tv (for the Popular browse toggle)
+  category: "popular", // popular | top_rated | new
+  genreId: "", // "" = all genres
+  genres: { movie: [], tv: [] }, // cached genre lists
   query: "",
   page: 1,
   totalPages: 1,
@@ -114,6 +117,9 @@ function setupDevice() {
     if (!e.target.closest(".user-menu") && !e.target.closest(".nav-toggle")) {
       $("#navMenu").classList.remove("open");
     }
+    if (!e.target.closest("#notifMenu") && !e.target.closest("#notifBtn")) {
+      $("#notifMenu").classList.add("hidden");
+    }
   });
 
   // Switch layout from the menu
@@ -172,6 +178,11 @@ function setupAuthUI() {
 
   $("#signOutBtn").addEventListener("click", () => DB.signOut());
   $("#profileBtn").addEventListener("click", () => openProfile(state.user.id));
+  $("#accountBtn").addEventListener("click", () => openProfile(state.user.id));
+  $("#notifBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    openNotifMenu();
+  });
   $("#avatarInput").addEventListener("change", onAvatarPicked);
   $("#activityBtn").addEventListener("click", () => loadActivity("all"));
   $("#watchlistBtn").addEventListener("click", () => loadWatchlist());
@@ -214,22 +225,53 @@ function movieCard(m) {
     ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${m.poster_path}" alt="${esc(m.title)}" />`
     : `<div class="poster placeholder">${esc(m.title)}</div>`;
   const mt = m.media_type || "movie";
+  const saved = state.watchlistIds.has(encodeId(m.id, mt));
+  const rating = m.vote_average ? m.vote_average.toFixed(1) : "–";
   const card = el(`
     <div class="card" data-mid="${m.id}" data-mt="${mt}">
-      ${mt === "tv" ? '<span class="media-tag">TV</span>' : ""}
-      <span class="like-badge hidden"><span class="heart">♥</span> <span class="lb-n"></span></span>
-      ${poster}
+      <div class="poster-wrap">
+        ${poster}
+        <span class="media-tag ${mt}">${mt === "tv" ? "TV" : "FILM"}</span>
+        <span class="like-badge hidden"><span class="heart">♥</span> <span class="lb-n"></span></span>
+        <button class="card-bookmark ${saved ? "saved" : ""}" title="${saved ? "In watchlist" : "Add to watchlist"}">🔖</button>
+        <div class="card-hover">
+          <div class="card-hover-rating"><span class="badge-star">★ ${rating}</span></div>
+          <p class="card-hover-overview">${esc(m.overview || "No synopsis available.")}</p>
+          <span class="card-hover-cta">View details →</span>
+        </div>
+      </div>
       <div class="card-body">
         <div class="card-title">${esc(m.title)}</div>
         <div class="card-meta">
           <span>${TMDB.year(m.release_date) || "—"}</span>
-          <span class="badge-star">★ ${m.vote_average ? m.vote_average.toFixed(1) : "–"}</span>
+          <span class="badge-star">★ ${rating}</span>
         </div>
       </div>
     </div>
   `);
   card.addEventListener("click", () => openMovie(m.id, mt));
+  card.querySelector(".card-bookmark").addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleCardBookmark(m, mt, e.currentTarget);
+  });
   return card;
+}
+
+// Toggle watchlist straight from a poster (no modal).
+async function toggleCardBookmark(m, mt, btn) {
+  const sid = encodeId(m.id, mt);
+  const saved = state.watchlistIds.has(sid);
+  btn.disabled = true;
+  const { error } = saved
+    ? await DB.removeFromWatchlist(state.user.id, sid)
+    : await DB.addToWatchlist({ movie: storable(m, mt), user: state.user });
+  btn.disabled = false;
+  if (error) return;
+  if (saved) state.watchlistIds.delete(sid);
+  else state.watchlistIds.add(sid);
+  btn.classList.toggle("saved", !saved);
+  btn.title = saved ? "Add to watchlist" : "In watchlist";
+  if (state.mode === "watch" && saved) btn.closest(".card")?.remove(); // dropped from watchlist view
 }
 
 function renderMovies(movies, append) {
@@ -259,22 +301,53 @@ async function decorateLikeCounts(movies) {
   }
 }
 
+const CATEGORY_LABELS = { popular: "Popular", top_rated: "Top rated", new: "New releases" };
+
 async function loadPopular(page = 1) {
   state.mode = "popular";
   state.page = page;
   if (page === 1) clearPeople();
-  const tv = state.browseType === "tv";
-  $("#sectionTitle").textContent = tv ? "Popular series" : "Popular movies";
+  setBrowseControls(true);
+  const type = state.browseType;
+  const typeWord = type === "tv" ? "series" : "movies";
+  const genreName = state.genreId
+    ? state.genres[type].find((g) => String(g.id) === String(state.genreId))?.name || ""
+    : "";
+  $("#sectionTitle").textContent = genreName
+    ? `${genreName} ${typeWord}`
+    : `${CATEGORY_LABELS[state.category]} ${typeWord}`;
   await runLoad(async () => {
-    const data = tv ? await TMDB.getPopularTV(page) : await TMDB.getPopular(page);
-    return { ...data, results: (data.results || []).map((it) => TMDB.normalizeItem(it, state.browseType)) };
+    const data = state.genreId
+      ? await TMDB.discover(type, { genreId: state.genreId, category: state.category, page })
+      : await TMDB.getList(type, state.category, page);
+    return { ...data, results: (data.results || []).map((it) => TMDB.normalizeItem(it, type)) };
   }, page === 1);
+}
+
+function setBrowseControls(visible) {
+  $("#browseControls").classList.toggle("hidden", !visible);
+}
+
+async function loadGenres(type) {
+  if (!state.genres[type].length) {
+    try {
+      state.genres[type] = (await TMDB.getGenres(type)).genres || [];
+    } catch {
+      state.genres[type] = [];
+    }
+  }
+  const sel = $("#genreSelect");
+  sel.innerHTML =
+    '<option value="">All genres</option>' +
+    state.genres[type].map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join("");
+  sel.value = state.genreId || "";
 }
 
 async function loadSearch(query, page = 1) {
   state.mode = "search";
   state.query = query;
   state.page = page;
+  setBrowseControls(false);
   $("#sectionTitle").textContent = `Results for “${query}”`;
   await runLoad(async () => {
     const data = await TMDB.searchMulti(query, page);
@@ -341,6 +414,7 @@ async function loadMine() {
   state.mode = "mine";
   showBrowse();
   clearPeople();
+  setBrowseControls(false);
   $("#sectionTitle").textContent = "My ratings";
   $("#loadMore").classList.add("hidden");
   $("#grid").classList.remove("list");
@@ -369,6 +443,7 @@ async function loadWatchlist() {
   state.mode = "watch";
   showBrowse();
   clearPeople();
+  setBrowseControls(false);
   $("#sectionTitle").textContent = "Your watchlist";
   $("#loadMore").classList.add("hidden");
   $("#grid").classList.remove("list");
@@ -477,6 +552,7 @@ async function loadActivity(scope = activityScope) {
   state.mode = "activity";
   showBrowse();
   clearPeople();
+  setBrowseControls(false);
   $("#loadMore").classList.add("hidden");
   $("#sectionTitle").innerHTML = `Activity
     <span class="scope-toggle">
@@ -540,6 +616,7 @@ async function loadMyProfileState() {
   } catch {
     state.myProfile = { top_movies: [] };
   }
+  updateAccountIcons();
 }
 
 function avatarHTML(profile, name, cls = "") {
@@ -613,7 +690,7 @@ async function refreshRecBadge() {
     const badge = $("#recBadge");
     badge.textContent = n > 9 ? "9+" : n;
     badge.classList.toggle("hidden", n === 0);
-    $("#navToggle").classList.toggle("has-badge", n > 0);
+    $("#notifBtn").classList.toggle("has-badge", n > 0);
   } catch {
     /* recommendations table may not exist yet */
   }
@@ -622,7 +699,59 @@ async function refreshRecBadge() {
 function markRecsSeen() {
   localStorage.setItem("cinerate_recs_seen", new Date().toISOString());
   $("#recBadge")?.classList.add("hidden");
-  $("#navToggle")?.classList.remove("has-badge");
+  $("#notifBtn")?.classList.remove("has-badge");
+}
+
+// Set the topbar avatar icon to the user's photo (or their initial).
+function updateAccountIcons() {
+  const av = $("#navAvatar");
+  if (!av) return;
+  const url = state.myProfile?.avatar_url;
+  const name = state.user?.user_metadata?.display_name || state.user?.email || "?";
+  if (url) {
+    av.style.backgroundImage = `url("${url}")`;
+    av.classList.add("has-img");
+    av.textContent = "";
+  } else {
+    av.style.backgroundImage = "";
+    av.classList.remove("has-img");
+    av.textContent = name.slice(0, 1).toUpperCase();
+  }
+}
+
+// Notifications dropdown (incoming recommendations).
+async function openNotifMenu() {
+  const menu = $("#notifMenu");
+  if (!menu.classList.contains("hidden")) {
+    menu.classList.add("hidden");
+    return;
+  }
+  menu.classList.remove("hidden");
+  menu.innerHTML = `<div class="notif-head">Notifications</div><div class="notif-empty">Loading…</div>`;
+  try {
+    const recs = await DB.getIncomingRecommendations(state.user.id);
+    const body = recs.length
+      ? recs
+          .slice(0, 12)
+          .map(
+            (r) => `<div class="notif-item" data-mid="${decodeRealId(r.movie_id)}" data-mt="${decodeType(r.movie_id)}">
+              <b>${esc(r.from_name || "Someone")}</b> recommended <b>${esc(r.movie_title)}</b>
+              ${r.note ? `<div class="notif-note">“${esc(r.note)}”</div>` : ""}
+            </div>`
+          )
+          .join("")
+      : '<div class="notif-empty">No notifications yet.</div>';
+    menu.innerHTML = `<div class="notif-head">Notifications</div>${body}`;
+    menu.querySelectorAll(".notif-item").forEach((it) =>
+      it.addEventListener("click", () => {
+        menu.classList.add("hidden");
+        openMovie(Number(it.dataset.mid), it.dataset.mt);
+      })
+    );
+    markRecsSeen();
+  } catch {
+    menu.innerHTML = `<div class="notif-head">Notifications</div><div class="notif-empty">No notifications.</div>`;
+  }
 }
 
 async function loadIncomingRecs(userId) {
@@ -812,6 +941,7 @@ async function onAvatarPicked(e) {
     const url = await DB.uploadAvatar(state.user.id, file);
     await DB.updateProfile(state.user.id, { avatar_url: url });
     state.myProfile.avatar_url = url;
+    updateAccountIcons();
     if (state.mode === "profile") openProfile(state.user.id);
   } catch (err) {
     alert("Couldn't upload photo: " + err.message);
@@ -919,7 +1049,7 @@ function applyDeepLink() {
 // =====================================================
 //  MOVIE DETAIL MODAL
 // =====================================================
-let modalState = { movie: null, mediaType: "movie", storeId: 0, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [], likeCount: 0 };
+let modalState = { movie: null, mediaType: "movie", storeId: 0, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [], likeCount: 0, trailer: null };
 
 async function openMovie(id, mediaType = "movie") {
   const modal = $("#modal");
@@ -945,6 +1075,7 @@ async function openMovie(id, mediaType = "movie") {
     modalState.storeId = storeId;
     modalState.ratings = ratings;
     modalState.likeCount = likeCount;
+    modalState.trailer = TMDB.trailerKey(raw.videos);
     const mine = ratings.find((r) => r.user_id === state.user.id);
     modalState.myRating = mine ? Number(mine.rating) : 0;
     modalState.myMode = mine?.mode || "simple";
@@ -1115,7 +1246,10 @@ function renderModal() {
   };
 
   $("#modalBody").innerHTML = `
-    <div class="detail-hero">${backdrop}</div>
+    <div class="detail-hero">
+      ${backdrop}
+      ${modalState.trailer ? '<button class="trailer-btn" id="trailerBtn">▶ Play trailer</button>' : ""}
+    </div>
     <div class="detail-main">
       ${poster}
       <div class="detail-info">
@@ -1239,6 +1373,10 @@ function renderModal() {
     shareLink(shareBase() + (modalState.mediaType === "tv" ? "?tv=" : "?movie=") + modalState.movie.id, e.currentTarget)
   );
   $("#recommendMovie").addEventListener("click", () => openRecommendPicker(modalState.movie));
+  $("#trailerBtn")?.addEventListener("click", () => {
+    const hero = document.querySelector(".detail-hero");
+    hero.innerHTML = `<iframe class="trailer-frame" src="https://www.youtube.com/embed/${modalState.trailer}?autoplay=1" title="Trailer" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+  });
   $("#saveRating").addEventListener("click", saveRating);
   if (myExisting) $("#deleteRating").addEventListener("click", removeRating);
   $("#modalBody")
@@ -1492,13 +1630,27 @@ function setupAppUI() {
   });
 
   document.querySelectorAll(".browse-btn").forEach((b) =>
-    b.addEventListener("click", () => {
+    b.addEventListener("click", async () => {
       state.browseType = b.dataset.browse;
+      state.genreId = "";
       document.querySelectorAll(".browse-btn").forEach((x) => x.classList.toggle("active", x === b));
       $("#searchInput").value = "";
+      await loadGenres(state.browseType);
       loadPopular();
     })
   );
+
+  document.querySelectorAll(".cat-pill").forEach((p) =>
+    p.addEventListener("click", () => {
+      state.category = p.dataset.cat;
+      document.querySelectorAll(".cat-pill").forEach((x) => x.classList.toggle("active", x === p));
+      loadPopular();
+    })
+  );
+  $("#genreSelect").addEventListener("change", (e) => {
+    state.genreId = e.target.value;
+    loadPopular();
+  });
 
   $("#loadMore").addEventListener("click", () => {
     const next = state.page + 1;
@@ -1539,6 +1691,7 @@ function boot() {
     state.user = session?.user || null;
     if (state.user) {
       showApp();
+      loadGenres(state.browseType);
       loadPopular();
       refreshWatchlistIds();
       refreshLikedIds();
