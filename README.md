@@ -88,7 +88,8 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
 - **Half-star precision** — rate from 0.5 to 5.0 in 0.5 steps (e.g. 3.5)
 - **Two rating modes:** *Simple* (one score) or *Detailed* — rate **Movie, Directing,
   Acting, Music & Scenario** separately and the average becomes your score
-- **Cast & director** shown on every movie (photos, names, characters)
+- **Cast & director** shown on every movie (photos, names, characters);
+  click an actor or director to see their **bio + full filmography**
 - **Activity feed** — a global *Everyone* feed plus your personal *You* feed
 - **Profiles** — avatar upload, bio, a **Top 5** movies showcase, and a
   scrollable **Watched** history

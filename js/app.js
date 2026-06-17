@@ -1344,6 +1344,91 @@ async function openPeopleList(title, userId, kind) {
 }
 
 // =====================================================
+//  PERSON PAGE (actor / director bio + filmography)
+// =====================================================
+async function openPerson(personId) {
+  openSheet(`<div class="grid-status">Loading…</div>`);
+  try {
+    const p = await TMDB.getPerson(personId);
+    renderPerson(p);
+  } catch (err) {
+    $("#sheetBody").innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
+function personFilmCard(c) {
+  const mt = c.media_type === "tv" ? "tv" : "movie";
+  const title = c.title || c.name || "Untitled";
+  const date = c.release_date || c.first_air_date || "";
+  const poster = c.poster_path
+    ? `<img class="poster" loading="lazy" src="${TMDB.IMG}${c.poster_path}" alt="${esc(title)}" />`
+    : `<div class="poster placeholder">${esc(title)}</div>`;
+  const sub = c.character ? "as " + c.character : c.job || "";
+  return `<div class="pfilm-card" data-mid="${c.id}" data-mt="${mt}">
+    <span class="media-tag ${mt}">${mt === "tv" ? "TV" : "FILM"}</span>
+    ${poster}
+    <div class="pfilm-title">${esc(title)}${date ? ` <span class="muted">${date.slice(0, 4)}</span>` : ""}</div>
+    ${sub ? `<div class="pfilm-sub">${esc(sub)}</div>` : ""}
+  </div>`;
+}
+
+function dedupeCredits(list) {
+  const seen = new Set();
+  return list.filter((c) => {
+    const k = (c.media_type || "movie") + ":" + c.id;
+    if (seen.has(k) || (!c.title && !c.name)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+function renderPerson(p) {
+  const photo = p.profile_path
+    ? `<img class="person-photo" src="${TMDB.IMG_PROFILE}${p.profile_path}" alt="${esc(p.name)}" />`
+    : `<div class="person-photo placeholder">${esc((p.name || "?").slice(0, 1))}</div>`;
+  const bornBits = [p.birthday, p.place_of_birth].filter(Boolean).join(" · ");
+  const acting = dedupeCredits([...(p.combined_credits?.cast || [])]).sort(
+    (a, b) => (b.popularity || 0) - (a.popularity || 0)
+  );
+  const directed = dedupeCredits(
+    (p.combined_credits?.crew || []).filter((c) => c.job === "Director")
+  ).sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+  const bio = (p.biography || "").trim();
+
+  $("#sheetBody").innerHTML = `
+    <div class="person-head">
+      ${photo}
+      <div class="person-meta">
+        <h2>${esc(p.name)}</h2>
+        ${p.known_for_department ? `<div class="muted small">${esc(p.known_for_department)}</div>` : ""}
+        ${bornBits ? `<div class="person-born">${esc(bornBits)}</div>` : ""}
+      </div>
+    </div>
+    ${bio ? `<p class="person-bio">${esc(bio)}</p>` : ""}
+    ${
+      directed.length
+        ? `<div class="person-section"><h3>Directed</h3>
+            <div class="pfilm-grid">${directed.slice(0, 16).map(personFilmCard).join("")}</div></div>`
+        : ""
+    }
+    ${
+      acting.length
+        ? `<div class="person-section"><h3>Acting</h3>
+            <div class="pfilm-grid">${acting.slice(0, 30).map(personFilmCard).join("")}</div></div>`
+        : ""
+    }
+  `;
+  $("#sheetBody")
+    .querySelectorAll(".pfilm-card")
+    .forEach((c) =>
+      c.addEventListener("click", () => {
+        closeSheet();
+        openMovie(Number(c.dataset.mid), c.dataset.mt);
+      })
+    );
+}
+
+// =====================================================
 //  SHARING (deep links)
 // =====================================================
 const shareBase = () => location.origin + location.pathname;
@@ -1688,9 +1773,7 @@ function renderModal() {
   const isTV = modalState.mediaType === "tv";
   const crew = m.credits?.crew || [];
   const cast = m.credits?.cast || [];
-  const directors = isTV
-    ? (m.created_by || []).map((c) => c.name)
-    : crew.filter((c) => c.job === "Director").map((c) => c.name);
+  const directors = isTV ? m.created_by || [] : crew.filter((c) => c.job === "Director");
   const creditLabel = isTV ? "Created by" : "Directed by";
   const providers = TMDB.watchProviders(m);
   const similar = (m.recommendations?.results || [])
@@ -1707,7 +1790,7 @@ function renderModal() {
     const photo = c.profile_path
       ? `<img class="cast-photo" loading="lazy" src="${TMDB.IMG_PROFILE}${c.profile_path}" alt="${esc(c.name)}" />`
       : `<div class="cast-photo placeholder">${esc(c.name.slice(0, 1))}</div>`;
-    return `<div class="cast-card">
+    return `<div class="cast-card" data-pid="${c.id}">
       ${photo}
       <div class="cast-name">${esc(c.name)}</div>
       <div class="cast-char">${esc(c.character || "")}</div>
@@ -1727,7 +1810,7 @@ function renderModal() {
           ${TMDB.year(m.release_date) || ""} ${subMeta}
           ${m.genres?.length ? "· " + m.genres.map((g) => esc(g.name)).join(", ") : ""}
         </div>
-        ${directors.length ? `<div class="detail-director">🎬 ${creditLabel} <b>${directors.map(esc).join(", ")}</b></div>` : ""}
+        ${directors.length ? `<div class="detail-director">🎬 ${creditLabel} ${directors.map((d) => `<b class="person-link" data-pid="${d.id}">${esc(d.name)}</b>`).join(", ")}</div>` : ""}
         <p class="detail-overview">${esc(m.overview || "No synopsis available.")}</p>
         <div class="detail-actions">
           <button class="btn btn-watch" id="likeToggle"></button>
@@ -1914,6 +1997,14 @@ function renderModal() {
   $("#modalBody")
     .querySelectorAll(".sim-card")
     .forEach((c) => c.addEventListener("click", () => openMovie(Number(c.dataset.mid), c.dataset.mt)));
+  $("#modalBody")
+    .querySelectorAll(".cast-card[data-pid], .person-link[data-pid]")
+    .forEach((c) =>
+      c.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPerson(c.dataset.pid);
+      })
+    );
   $("#trailerBtn")?.addEventListener("click", () => {
     const hero = document.querySelector(".detail-hero");
     hero.innerHTML = `<iframe class="trailer-frame" src="https://www.youtube.com/embed/${modalState.trailer}?autoplay=1" title="Trailer" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;

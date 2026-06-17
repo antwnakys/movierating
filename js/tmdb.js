@@ -49,6 +49,10 @@ export function getSeason(tvId, seasonNumber) {
   return tmdb(`/tv/${tvId}/season/${seasonNumber}`);
 }
 
+export function getPerson(id) {
+  return tmdb(`/person/${id}`, { append_to_response: "combined_credits" });
+}
+
 // "More like this" — same media type as the parent.
 export function recommendations(type, id) {
   return tmdb(`/${type}/${id}/recommendations`);
