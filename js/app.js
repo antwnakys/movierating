@@ -47,17 +47,27 @@ const num = (v) => (v == null ? 0 : Number(v));
 // (TMDB movie 550 ≠ tv 550) we offset TV ids into a separate range. This keeps
 // the whole feature in the frontend — no schema changes.
 const TV_OFFSET = 1_000_000_000; // 1e9
-const EPISODE_OFFSET = 5_000_000_000_000; // 5e12 — episodes live above movies & series
+const SEASON_OFFSET = 3_000_000_000_000; // 3e12 — whole-season ratings
+const EPISODE_OFFSET = 5_000_000_000_000; // 5e12 — episodes live above everything
 const encodeId = (id, mt) => (mt === "tv" ? Number(id) + TV_OFFSET : Number(id));
-// One series episode → a single stable id: 5e12 + tvId*1e6 + season*1e3 + episode.
+// A whole season → 3e12 + tvId*1e3 + season.
+const encodeSeason = (tvId, season) => SEASON_OFFSET + Number(tvId) * 1_000 + Number(season);
+// One episode → 5e12 + tvId*1e6 + season*1e3 + episode.
 const encodeEpisode = (tvId, season, ep) =>
   EPISODE_OFFSET + Number(tvId) * 1_000_000 + Number(season) * 1_000 + Number(ep);
 const decodeType = (sid) =>
-  Number(sid) >= EPISODE_OFFSET ? "episode" : Number(sid) >= TV_OFFSET ? "tv" : "movie";
-// Real TMDB id to open: for an episode this is its parent series id.
+  Number(sid) >= EPISODE_OFFSET
+    ? "episode"
+    : Number(sid) >= SEASON_OFFSET
+      ? "season"
+      : Number(sid) >= TV_OFFSET
+        ? "tv"
+        : "movie";
+// Real TMDB id to open: for a season/episode this is its parent series id.
 const decodeRealId = (sid) => {
   sid = Number(sid);
   if (sid >= EPISODE_OFFSET) return Math.floor((sid - EPISODE_OFFSET) / 1_000_000);
+  if (sid >= SEASON_OFFSET) return Math.floor((sid - SEASON_OFFSET) / 1_000);
   if (sid >= TV_OFFSET) return sid - TV_OFFSET;
   return sid;
 };
@@ -73,7 +83,8 @@ const cardFromRow = (r) => {
   const kind = decodeType(r.movie_id);
   return {
     id: decodeRealId(r.movie_id),
-    media_type: kind === "episode" ? "tv" : kind, // episode cards open the parent series
+    // season/episode cards open the parent series
+    media_type: kind === "episode" || kind === "season" ? "tv" : kind,
     title: r.movie_title,
     poster_path: r.movie_poster,
     release_date: r.movie_year || "",
@@ -1397,7 +1408,9 @@ async function loadEpisodes(seasonNumber) {
       list.innerHTML = `<p class="empty">No episodes found.</p>`;
       return;
     }
-    const ids = eps.map((e) => encodeEpisode(tvId, seasonNumber, e.episode_number));
+    const seasonId = encodeSeason(tvId, seasonNumber);
+    const epIds = eps.map((e) => encodeEpisode(tvId, seasonNumber, e.episode_number));
+    const ids = [seasonId, ...epIds];
     let ratings = [];
     try {
       ratings = await DB.getRatingsForIds(ids);
@@ -1411,7 +1424,23 @@ async function loadEpisodes(seasonNumber) {
       (comm[mid] = comm[mid] || []).push(Number(r.rating));
       if (r.user_id === state.user.id) mine[mid] = Number(r.rating);
     });
-    list.innerHTML = eps
+    // Your average across the episodes you've rated this season
+    const myEpVals = epIds.map((id) => mine[id]).filter(Boolean);
+    const myEpAvg = myEpVals.length ? myEpVals.reduce((s, x) => s + x, 0) / myEpVals.length : null;
+    const sMy = mine[seasonId] || 0;
+    const sComm = comm[seasonId];
+    const sAvg = sComm && sComm.length ? sComm.reduce((s, x) => s + x, 0) / sComm.length : null;
+    const seasonRow = `<div class="ep-row season-row" data-eid="${seasonId}" data-kind="season">
+        <div class="ep-info">
+          <div class="ep-title"><span class="ep-num">SEASON ${seasonNumber}</span> Rate the whole season</div>
+          <div class="ep-sub">${sAvg != null ? `★ ${sAvg.toFixed(1)} · ${sComm.length}` : '<span class="muted">no season ratings yet</span>'}${myEpAvg != null ? ` · your episodes avg ★ ${myEpAvg.toFixed(1)} (${myEpVals.length})` : ""}</div>
+        </div>
+        <div class="ep-rate">
+          <span class="star-rate input ep-stars" data-eid="${seasonId}"><span class="layer bg">★★★★★</span><span class="layer fill" style="width:${(sMy / 5) * 100}%">★★★★★</span></span>
+          <span class="ep-readout">${sMy ? sMy.toFixed(1) : "—"}</span>
+        </div>
+      </div>`;
+    list.innerHTML = seasonRow + eps
       .map((e) => {
         const eid = encodeEpisode(tvId, seasonNumber, e.episode_number);
         const my = mine[eid] || 0;
@@ -1463,7 +1492,10 @@ function wireEpisodeStars(seasonNumber) {
         committed = v;
         fill.style.width = (v / 5) * 100 + "%";
         readout.textContent = "…";
-        const title = `${seriesTitle} — S${seasonNumber}E${row.dataset.ep}${row.dataset.name ? ": " + row.dataset.name : ""}`;
+        const title =
+          row.dataset.kind === "season"
+            ? `${seriesTitle} — Season ${seasonNumber}`
+            : `${seriesTitle} — S${seasonNumber}E${row.dataset.ep}${row.dataset.name ? ": " + row.dataset.name : ""}`;
         const { error } = await DB.upsertRating({
           movie: { id: eid, title, poster_path: poster, release_date: row.dataset.air || "" },
           rating: v,
@@ -1484,7 +1516,7 @@ function wireEpisodeStars(seasonNumber) {
 let modalState = { movie: null, mediaType: "movie", storeId: 0, myRating: 0, myMode: "simple", myAspects: emptyAspects(), ratings: [], likeCount: 0, trailer: null };
 
 async function openMovie(id, mediaType = "movie") {
-  if (mediaType === "episode") mediaType = "tv"; // episodes open their parent series
+  if (mediaType === "episode" || mediaType === "season") mediaType = "tv"; // open the parent series
   const modal = $("#modal");
   modal.classList.remove("hidden");
   $("#modalBody").innerHTML = `<div class="grid-status">Loading…</div>`;

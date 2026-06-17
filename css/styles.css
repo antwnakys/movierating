@@ -722,3 +722,6 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 .ep-readout { font-size: 13px; font-weight: 700; color: var(--gold); width: 26px; text-align: right; }
 .device-mobile .rate-scope, .device-mobile #episodeRateBox { margin-left: 16px; margin-right: 16px; }
 .device-mobile .ep-stars { font-size: 22px; }
+
+.ep-row.season-row { background: var(--bg-3); border-radius: 8px; padding: 12px; border-top: none; margin-bottom: 6px; }
+.ep-row.season-row .ep-num { color: var(--gold); }
