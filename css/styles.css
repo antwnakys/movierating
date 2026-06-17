@@ -597,6 +597,9 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
    MOBILE LAYOUT  (body.device-mobile — set by JS on narrow
    viewports or when the user picks "mobile")
    ============================================================ */
+/* Centered phone-width column on every screen size */
+.device-mobile .topbar-inner,
+.device-mobile .app { max-width: 480px; margin-left: auto; margin-right: auto; }
 .device-mobile .topbar-inner { position: relative; gap: 10px; padding: 10px 14px; }
 .device-mobile .brand { font-size: 18px; }
 .device-mobile .search input { padding: 9px 14px; font-size: 14px; }
@@ -618,7 +621,8 @@ b.author-link:hover, .review-name.author-link:hover { color: var(--accent); text
 
 /* Movie detail modal → full screen */
 .device-mobile .modal { padding: 0; }
-.device-mobile .modal-panel { max-width: 100%; width: 100%; height: 100%; max-height: 100%; border-radius: 0; border: none; }
+.device-mobile .modal-panel,
+.device-mobile .sheet-panel { max-width: 480px; width: 100%; height: 100%; max-height: 100%; margin: 0 auto; border-radius: 0; border: none; }
 .device-mobile .detail-backdrop { height: 180px; }
 .device-mobile .detail-main { flex-direction: column; margin-top: -54px; gap: 12px; padding: 0 16px 16px; }
 .device-mobile .detail-info { padding-top: 0; }
