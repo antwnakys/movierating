@@ -4,6 +4,7 @@ const BASE = "https://api.themoviedb.org/3";
 export const IMG = "https://image.tmdb.org/t/p/w500";
 export const IMG_BACKDROP = "https://image.tmdb.org/t/p/w1280";
 export const IMG_PROFILE = "https://image.tmdb.org/t/p/w185";
+export const IMG_LOGO = "https://image.tmdb.org/t/p/w92";
 
 async function tmdb(path, params = {}) {
   const url = new URL(BASE + path);
@@ -37,11 +38,26 @@ export function searchMulti(query, page = 1) {
 }
 
 export function getMovie(id) {
-  return tmdb(`/movie/${id}`, { append_to_response: "credits,videos" });
+  return tmdb(`/movie/${id}`, { append_to_response: "credits,videos,recommendations,watch/providers" });
 }
 
 export function getTV(id) {
-  return tmdb(`/tv/${id}`, { append_to_response: "credits,videos" });
+  return tmdb(`/tv/${id}`, { append_to_response: "credits,videos,recommendations,watch/providers" });
+}
+
+// "More like this" — same media type as the parent.
+export function recommendations(type, id) {
+  return tmdb(`/${type}/${id}/recommendations`);
+}
+
+// Streaming providers for a region from an appended watch/providers object.
+export function watchProviders(detail, region = "US") {
+  const all = detail["watch/providers"]?.results || {};
+  const r = all[region] || all[Object.keys(all)[0]] || {};
+  const seen = new Set();
+  return (r.flatrate || r.free || r.ads || [])
+    .filter((p) => !seen.has(p.provider_id) && seen.add(p.provider_id))
+    .slice(0, 6);
 }
 
 // A browse section for movies or tv: popular | top_rated | new

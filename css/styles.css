@@ -262,6 +262,46 @@ html, body {
 }
 .genre-select:focus { border-color: var(--accent); }
 
+/* Stats page */
+.stats-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 2px 20px; flex-wrap: wrap; }
+.stats-head h2 { margin: 0; font-size: 24px; }
+.stats-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.stat-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; text-align: center; }
+.stat-num { font-size: 26px; font-weight: 800; }
+.stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+.dist-chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding-top: 10px; }
+.dist-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; gap: 6px; }
+.dist-bar { width: 70%; min-height: 2px; background: var(--gold); border-radius: 4px 4px 0 0; }
+.dist-x { font-size: 11px; color: var(--muted); }
+.decade-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.decade-item { background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; display: flex; flex-direction: column; }
+.decade-item b { font-size: 16px; }
+.decade-item span { font-size: 12px; color: var(--muted); }
+
+/* Lists */
+.lists-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.list-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; cursor: pointer; transition: transform 0.12s, border-color 0.12s; }
+.list-card:hover { transform: translateY(-3px); border-color: var(--accent); }
+.list-card-title { font-weight: 700; font-size: 16px; }
+.list-card-meta { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.list-form { padding: 8px 24px 24px; display: flex; flex-direction: column; gap: 12px; }
+.list-form input, .list-form textarea {
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 11px 14px; font: inherit; outline: none;
+}
+.list-form textarea { resize: vertical; min-height: 60px; }
+.list-public { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.list-create-inline { display: flex; gap: 8px; }
+.list-create-inline input { flex: 1; }
+
+/* Streaming providers */
+.provider-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.provider { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 70px; text-align: center; }
+.provider img { width: 50px; height: 50px; border-radius: 12px; }
+.provider span { font-size: 11px; color: var(--muted); line-height: 1.2; }
+.sim-card { width: 110px; flex-shrink: 0; cursor: pointer; }
+.sim-card .cast-photo { width: 110px; height: 165px; }
+
 /* Movies / Series browse toggle */
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .browse-toggle { display: inline-flex; background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }

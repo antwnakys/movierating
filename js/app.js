@@ -184,9 +184,12 @@ function setupAuthUI() {
     openNotifMenu();
   });
   $("#avatarInput").addEventListener("change", onAvatarPicked);
+  $("#forYouBtn").addEventListener("click", () => loadForYou());
   $("#activityBtn").addEventListener("click", () => loadActivity("all"));
   $("#watchlistBtn").addEventListener("click", () => loadWatchlist());
+  $("#listsBtn").addEventListener("click", () => loadMyLists());
   $("#myRatingsBtn").addEventListener("click", () => loadMine());
+  $("#statsBtn").addEventListener("click", () => loadStats());
   $("#brandHome").addEventListener("click", (e) => {
     e.preventDefault();
     $("#searchInput").value = "";
@@ -480,6 +483,321 @@ async function refreshWatchlistIds() {
 }
 
 // =====================================================
+//  FOR YOU (personalized recommendations)
+// =====================================================
+async function loadForYou() {
+  state.mode = "foryou";
+  showBrowse();
+  clearPeople();
+  setBrowseControls(false);
+  $("#sectionTitle").textContent = "For you";
+  $("#loadMore").classList.add("hidden");
+  const grid = $("#grid");
+  grid.classList.remove("list");
+  grid.innerHTML = "";
+  $("#gridStatus").textContent = "Building your picks…";
+  try {
+    const mine = await DB.getUserRatings(state.user.id);
+    const seeds = mine.filter((r) => Number(r.rating) >= 3.5).slice(0, 8);
+    if (!seeds.length) {
+      $("#gridStatus").textContent =
+        "Rate a few movies or shows you love (3.5★ or higher) and we'll suggest more here.";
+      return;
+    }
+    const ratedSet = new Set(mine.map((r) => Number(r.movie_id)));
+    const fetched = await Promise.all(
+      seeds.map((s) => {
+        const mt = decodeType(s.movie_id);
+        return TMDB.recommendations(mt, decodeRealId(s.movie_id))
+          .then((d) => ({ mt, results: d.results || [] }))
+          .catch(() => null);
+      })
+    );
+    const tally = new Map();
+    fetched.forEach((res) => {
+      if (!res) return;
+      res.results.forEach((it) => {
+        const norm = TMDB.normalizeItem(it, res.mt);
+        const enc = encodeId(norm.id, res.mt);
+        if (ratedSet.has(enc)) return;
+        const cur = tally.get(enc) || { item: norm, count: 0 };
+        cur.count++;
+        tally.set(enc, cur);
+      });
+    });
+    const ranked = [...tally.values()]
+      .sort((a, b) => b.count - a.count || (b.item.vote_average || 0) - (a.item.vote_average || 0))
+      .slice(0, 30)
+      .map((x) => x.item);
+    if (!ranked.length) {
+      $("#gridStatus").textContent = "No suggestions yet — rate a few more titles.";
+      return;
+    }
+    renderMovies(ranked, false);
+    $("#gridStatus").textContent = "";
+  } catch (err) {
+    $("#gridStatus").textContent = "⚠️ " + err.message;
+  }
+}
+
+// =====================================================
+//  STATS ("Your taste")
+// =====================================================
+async function loadStats() {
+  state.mode = "stats";
+  showProfileView();
+  const view = $("#profileView");
+  view.innerHTML = `<div class="grid-status">Crunching your stats…</div>`;
+  try {
+    const [mine, likes, watch, counts] = await Promise.all([
+      DB.getUserRatings(state.user.id),
+      DB.getLikes(state.user.id).catch(() => []),
+      DB.getWatchlist(state.user.id).catch(() => []),
+      DB.getFollowCounts(state.user.id).catch(() => ({ followers: 0, following: 0 })),
+    ]);
+    renderStats(mine, likes, watch, counts);
+  } catch (err) {
+    view.innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
+function renderStats(mine, likes, watch, counts) {
+  const view = $("#profileView");
+  const n = mine.length;
+  const avg = n ? mine.reduce((s, r) => s + Number(r.rating), 0) / n : 0;
+  const movies = mine.filter((r) => decodeType(r.movie_id) === "movie").length;
+  const series = n - movies;
+  const dist = {};
+  for (let v = 0.5; v <= 5; v += 0.5) dist[v.toFixed(1)] = 0;
+  mine.forEach((r) => {
+    const k = Number(r.rating).toFixed(1);
+    if (dist[k] != null) dist[k]++;
+  });
+  const maxD = Math.max(1, ...Object.values(dist));
+  const top = [...mine].sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 5);
+  const dec = {};
+  mine.forEach((r) => {
+    const y = parseInt(r.movie_year);
+    if (y) {
+      const d = Math.floor(y / 10) * 10;
+      dec[d] = (dec[d] || 0) + 1;
+    }
+  });
+  const decs = Object.entries(dec).sort((a, b) => a[0] - b[0]);
+
+  const stat = (num, label) => `<div class="stat-card"><div class="stat-num">${num}</div><div class="stat-label">${label}</div></div>`;
+  view.innerHTML = `
+    <div class="stats-head"><h2>Your taste</h2></div>
+    <div class="stats-cards">
+      ${stat(n, "Rated")}
+      ${stat(n ? avg.toFixed(2) : "–", "Avg rating")}
+      ${stat(movies, "Movies")}
+      ${stat(series, "Series")}
+      ${stat(likes.length, "Liked")}
+      ${stat(watch.length, "Watchlist")}
+      ${stat(counts.followers, "Followers")}
+      ${stat(counts.following, "Following")}
+    </div>
+    ${
+      n
+        ? `<div class="profile-section"><h3>Rating distribution</h3>
+            <div class="dist-chart">
+              ${Object.entries(dist)
+                .map(
+                  ([k, c]) =>
+                    `<div class="dist-col" title="${c} at ${k}★"><div class="dist-bar" style="height:${Math.round((c / maxD) * 100)}%"></div><div class="dist-x">${k}</div></div>`
+                )
+                .join("")}
+            </div>
+          </div>
+          <div class="profile-section"><h3>Your highest rated</h3>
+            <div class="top5-row">${top.map(likeCard).join("")}</div>
+          </div>
+          ${
+            decs.length
+              ? `<div class="profile-section"><h3>By decade</h3><div class="decade-row">${decs
+                  .map(([d, c]) => `<div class="decade-item"><b>${d}s</b><span>${c}</span></div>`)
+                  .join("")}</div></div>`
+              : ""
+          }`
+        : '<p class="empty" style="padding:20px 4px">Rate some movies to see your stats.</p>'
+    }
+  `;
+  view.querySelectorAll(".top5-card").forEach((c) =>
+    c.addEventListener("click", () => openMovie(Number(c.dataset.mid), c.dataset.mt))
+  );
+}
+
+// =====================================================
+//  CUSTOM LISTS
+// =====================================================
+const listCount = (l) => l.list_items?.[0]?.count ?? 0;
+
+function listCardHTML(l) {
+  return `<div class="list-card" data-id="${l.id}">
+    <div class="list-card-title">${esc(l.title)} ${l.is_public ? "" : '<span class="list-private">🔒</span>'}</div>
+    <div class="list-card-meta">${listCount(l)} titles${l.description ? " · " + esc(l.description) : ""}</div>
+  </div>`;
+}
+
+function renderLists(lists, isSelf, heading) {
+  const view = $("#profileView");
+  view.innerHTML = `
+    <div class="stats-head">
+      <h2>${esc(heading)}</h2>
+      ${isSelf ? '<button class="btn btn-primary" id="newListBtn">＋ New list</button>' : ""}
+    </div>
+    <div class="lists-grid">
+      ${
+        lists.length
+          ? lists.map(listCardHTML).join("")
+          : `<p class="empty">${isSelf ? "No lists yet — create one!" : "No public lists."}</p>`
+      }
+    </div>`;
+  if (isSelf) $("#newListBtn").addEventListener("click", openCreateList);
+  view.querySelectorAll(".list-card").forEach((c) =>
+    c.addEventListener("click", () => openListDetail(c.dataset.id))
+  );
+}
+
+async function loadMyLists() {
+  state.mode = "lists";
+  showProfileView();
+  $("#profileView").innerHTML = `<div class="grid-status">Loading…</div>`;
+  try {
+    const lists = await DB.getUserLists(state.user.id);
+    renderLists(lists, true, "Your lists");
+  } catch (err) {
+    $("#profileView").innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
+function openCreateList() {
+  openSheet(`<div class="people-list-head"><h2>New list</h2></div>
+    <div class="list-form">
+      <input id="listTitle" placeholder="List title (e.g. Best heist movies)" maxlength="80" />
+      <textarea id="listDesc" placeholder="Description (optional)" maxlength="200"></textarea>
+      <label class="list-public"><input type="checkbox" id="listPublic" checked /> Public list</label>
+      <button class="btn btn-primary" id="listCreate">Create list</button>
+      <span id="listFormStatus" class="muted small"></span>
+    </div>`);
+  $("#listCreate").addEventListener("click", async () => {
+    const title = $("#listTitle").value.trim();
+    if (!title) {
+      $("#listFormStatus").textContent = "Give it a title.";
+      return;
+    }
+    try {
+      await DB.createList({
+        user: state.user,
+        title,
+        description: $("#listDesc").value,
+        isPublic: $("#listPublic").checked,
+      });
+      closeSheet();
+      loadMyLists();
+    } catch (err) {
+      $("#listFormStatus").textContent = "⚠️ " + err.message;
+    }
+  });
+}
+
+async function openListDetail(listId) {
+  state.mode = "list";
+  showProfileView();
+  const view = $("#profileView");
+  view.innerHTML = `<div class="grid-status">Loading…</div>`;
+  try {
+    const [list, items] = await Promise.all([DB.getList(listId), DB.getListItems(listId)]);
+    if (!list) {
+      view.innerHTML = `<div class="grid-status">List not found or private.</div>`;
+      return;
+    }
+    const isOwner = list.user_id === state.user.id;
+    view.innerHTML = `
+      <div class="stats-head">
+        <div>
+          <h2>${esc(list.title)}</h2>
+          <div class="muted small">by ${esc(list.user_name || "user")} · ${items.length} titles${list.is_public ? "" : " · 🔒 private"}</div>
+          ${list.description ? `<p class="profile-bio">${esc(list.description)}</p>` : ""}
+        </div>
+        ${isOwner ? '<button class="btn btn-danger" id="deleteListBtn">Delete list</button>' : ""}
+      </div>
+      <div class="grid" id="listGrid"></div>
+      <div class="grid-status">${items.length ? "" : 'No titles yet — open a movie and tap "＋ List".'}</div>`;
+    const grid = $("#listGrid");
+    items.forEach((it) => {
+      const card = movieCard(cardFromRow(it));
+      if (isOwner) {
+        const rm = el('<button class="top5-remove" title="Remove">✕</button>');
+        rm.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await DB.removeFromList(listId, it.movie_id);
+          card.remove();
+        });
+        card.querySelector(".poster-wrap").appendChild(rm);
+      }
+      grid.appendChild(card);
+    });
+    if (isOwner)
+      $("#deleteListBtn").addEventListener("click", async () => {
+        if (!confirm("Delete this list?")) return;
+        await DB.deleteList(listId);
+        loadMyLists();
+      });
+  } catch (err) {
+    view.innerHTML = `<div class="grid-status">⚠️ ${esc(err.message)}</div>`;
+  }
+}
+
+// Sheet to add the current modal movie to one or more lists.
+async function openListPicker() {
+  const sid = modalState.storeId;
+  const store = storable(modalState.movie, modalState.mediaType);
+  const head = `<div class="people-list-head"><h2>Add to a list</h2></div>
+    <div class="recommend-note list-create-inline">
+      <input id="newListInline" placeholder="Create a new list…" maxlength="80" />
+      <button class="btn btn-primary" id="newListInlineBtn">Create & add</button>
+    </div>`;
+  openSheet(head + `<div class="grid-status">Loading your lists…</div>`);
+  const render = async () => {
+    const [lists, containing] = await Promise.all([
+      DB.getUserLists(state.user.id),
+      DB.getListsContaining(state.user.id, sid),
+    ]);
+    const body = lists.length
+      ? `<div class="people-list">${lists
+          .map(
+            (l) => `<div class="rec-row" data-id="${l.id}">
+              <span class="person-row-name">${esc(l.title)} <span class="muted small">(${listCount(l)})</span></span>
+              <button class="btn list-toggle ${containing.has(l.id) ? "btn-watch active" : "btn-primary"}">${containing.has(l.id) ? "✓ Added" : "Add"}</button>
+            </div>`
+          )
+          .join("")}</div>`
+      : '<p class="empty" style="padding:16px 24px">No lists yet — create one above.</p>';
+    $("#sheetBody").innerHTML = head + body;
+    $("#newListInlineBtn").addEventListener("click", async () => {
+      const t = $("#newListInline").value.trim();
+      if (!t) return;
+      const list = await DB.createList({ user: state.user, title: t, isPublic: true });
+      await DB.addToList({ listId: list.id, movie: store, user: state.user });
+      render();
+    });
+    $("#sheetBody")
+      .querySelectorAll(".rec-row")
+      .forEach((row) =>
+        row.querySelector(".list-toggle").addEventListener("click", async (e) => {
+          e.currentTarget.disabled = true;
+          if (e.currentTarget.classList.contains("active")) await DB.removeFromList(row.dataset.id, sid);
+          else await DB.addToList({ listId: row.dataset.id, movie: store, user: state.user });
+          render();
+        })
+      );
+  };
+  render();
+}
+
+// =====================================================
 //  ACTIVITY FEED (global + personal)
 // =====================================================
 let activityScope = "all"; // "all" = everyone, "mine" = just this user
@@ -557,6 +875,7 @@ async function loadActivity(scope = activityScope) {
   $("#sectionTitle").innerHTML = `Activity
     <span class="scope-toggle">
       <button class="scope-btn ${scope === "all" ? "active" : ""}" data-scope="all">Everyone</button>
+      <button class="scope-btn ${scope === "following" ? "active" : ""}" data-scope="following">Following</button>
       <button class="scope-btn ${scope === "mine" ? "active" : ""}" data-scope="mine">You</button>
     </span>`;
   document.querySelectorAll(".scope-btn").forEach((b) =>
@@ -568,15 +887,22 @@ async function loadActivity(scope = activityScope) {
   grid.innerHTML = "";
   $("#gridStatus").textContent = "Loading…";
   try {
-    const rows =
-      scope === "mine"
-        ? await DB.getUserRatings(state.user.id)
-        : await DB.getRecentActivity(40);
+    let rows;
+    if (scope === "mine") {
+      rows = await DB.getUserRatings(state.user.id);
+    } else if (scope === "following") {
+      const ids = await DB.getFollowingIds(state.user.id);
+      rows = await DB.getFollowingActivity(ids, 40);
+    } else {
+      rows = await DB.getRecentActivity(40);
+    }
     if (!rows.length) {
       $("#gridStatus").textContent =
         scope === "mine"
           ? "You haven't rated anything yet."
-          : "No activity yet — be the first to rate a movie!";
+          : scope === "following"
+            ? "No activity from people you follow yet — go follow some users!"
+            : "No activity yet — be the first to rate a movie!";
       return;
     }
     const ids = [...new Set(rows.map((r) => r.user_id))];
@@ -650,13 +976,14 @@ async function openProfile(userId) {
   view.innerHTML = `<div class="grid-status">Loading…</div>`;
   try {
     const isSelf = userId === state.user.id;
-    const [profile, counts, following, likes] = await Promise.all([
+    const [profile, counts, following, likes, lists] = await Promise.all([
       DB.getProfile(userId),
       DB.getFollowCounts(userId),
       isSelf ? Promise.resolve(false) : DB.isFollowing(state.user.id, userId),
       DB.getLikes(userId).catch(() => []),
+      DB.getUserLists(userId).catch(() => []),
     ]);
-    renderProfile(userId, profile, counts, following, isSelf, likes);
+    renderProfile(userId, profile, counts, following, isSelf, likes, lists);
     if (isSelf) {
       loadIncomingRecs(userId);
       markRecsSeen();
@@ -785,7 +1112,7 @@ function likeCard(l) {
   return `<div class="top5-card" data-mid="${realId}" data-mt="${mt}">${mt === "tv" ? '<span class="media-tag">TV</span>' : ""}${poster}<div class="top5-title">${esc(l.movie_title)}</div></div>`;
 }
 
-function renderProfile(userId, profile, counts, following, isSelf, likes = []) {
+function renderProfile(userId, profile, counts, following, isSelf, likes = [], lists = []) {
   const name = profile?.display_name || "User";
   const bio = profile?.bio || "";
   const top = Array.isArray(profile?.top_movies) ? profile.top_movies : [];
@@ -839,6 +1166,15 @@ function renderProfile(userId, profile, counts, following, isSelf, likes = []) {
       </div>
     </div>
 
+    ${
+      lists.length
+        ? `<div class="profile-section">
+            <h3>Lists ${`<span class="muted small">${lists.length}</span>`}</h3>
+            <div class="lists-grid">${lists.map(listCardHTML).join("")}</div>
+          </div>`
+        : ""
+    }
+
     <div class="profile-section">
       <h3>Watched</h3>
       <div class="grid" id="watchedGrid"></div>
@@ -865,6 +1201,9 @@ function renderProfile(userId, profile, counts, following, isSelf, likes = []) {
   );
   view.querySelectorAll(".top5-card").forEach((c) =>
     c.addEventListener("click", () => openMovie(Number(c.dataset.mid), c.dataset.mt))
+  );
+  view.querySelectorAll(".list-card").forEach((c) =>
+    c.addEventListener("click", () => openListDetail(c.dataset.id))
   );
 
   initWatched(userId);
@@ -1227,6 +1566,10 @@ function renderModal() {
     ? (m.created_by || []).map((c) => c.name)
     : crew.filter((c) => c.job === "Director").map((c) => c.name);
   const creditLabel = isTV ? "Created by" : "Directed by";
+  const providers = TMDB.watchProviders(m);
+  const similar = (m.recommendations?.results || [])
+    .slice(0, 12)
+    .map((it) => TMDB.normalizeItem(it, modalState.mediaType));
   const subMeta = isTV
     ? m.number_of_seasons
       ? "· " + m.number_of_seasons + " season" + (m.number_of_seasons === 1 ? "" : "s")
@@ -1264,6 +1607,7 @@ function renderModal() {
           <button class="btn btn-watch" id="likeToggle"></button>
           <button class="btn btn-watch" id="watchToggle"></button>
           <button class="btn btn-watch" id="top5Toggle"></button>
+          <button class="btn btn-watch" id="listToggle">＋ List</button>
           <button class="btn btn-watch" id="recommendMovie">📨 Recommend</button>
           <button class="btn btn-watch" id="shareMovie">↗ Share</button>
         </div>
@@ -1275,6 +1619,46 @@ function renderModal() {
         ? `<div class="cast">
             <h3>Cast</h3>
             <div class="cast-row">${cast.slice(0, 15).map(castCard).join("")}</div>
+          </div>`
+        : ""
+    }
+
+    ${
+      providers.length
+        ? `<div class="cast">
+            <h3>Where to watch</h3>
+            <div class="provider-row">
+              ${providers
+                .map(
+                  (p) => `<div class="provider" title="${esc(p.provider_name)}">
+                    <img src="${TMDB.IMG_LOGO}${p.logo_path}" alt="${esc(p.provider_name)}" />
+                    <span>${esc(p.provider_name)}</span>
+                  </div>`
+                )
+                .join("")}
+            </div>
+          </div>`
+        : ""
+    }
+
+    ${
+      similar.length
+        ? `<div class="cast">
+            <h3>More like this</h3>
+            <div class="cast-row">
+              ${similar
+                .map(
+                  (s) => `<div class="sim-card" data-mid="${s.id}" data-mt="${s.media_type}">
+                    ${
+                      s.poster_path
+                        ? `<img class="cast-photo" loading="lazy" src="${TMDB.IMG}${s.poster_path}" alt="${esc(s.title)}" />`
+                        : `<div class="cast-photo placeholder">${esc(s.title.slice(0, 1))}</div>`
+                    }
+                    <div class="cast-name">${esc(s.title)}</div>
+                  </div>`
+                )
+                .join("")}
+            </div>
           </div>`
         : ""
     }
@@ -1373,6 +1757,10 @@ function renderModal() {
     shareLink(shareBase() + (modalState.mediaType === "tv" ? "?tv=" : "?movie=") + modalState.movie.id, e.currentTarget)
   );
   $("#recommendMovie").addEventListener("click", () => openRecommendPicker(modalState.movie));
+  $("#listToggle").addEventListener("click", () => openListPicker());
+  $("#modalBody")
+    .querySelectorAll(".sim-card")
+    .forEach((c) => c.addEventListener("click", () => openMovie(Number(c.dataset.mid), c.dataset.mt)));
   $("#trailerBtn")?.addEventListener("click", () => {
     const hero = document.querySelector(".detail-hero");
     hero.innerHTML = `<iframe class="trailer-frame" src="https://www.youtube.com/embed/${modalState.trailer}?autoplay=1" title="Trailer" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
@@ -1687,9 +2075,12 @@ function boot() {
     return; // don't try to talk to Supabase with placeholder keys
   }
 
+  let appStarted = false; // init the app once per sign-in, not on every auth event
   DB.onAuth((session) => {
     state.user = session?.user || null;
     if (state.user) {
+      if (appStarted) return; // ignore token refreshes / re-emitted SIGNED_IN
+      appStarted = true;
       showApp();
       loadGenres(state.browseType);
       loadPopular();
@@ -1699,6 +2090,7 @@ function boot() {
       refreshRecBadge();
       applyDeepLink();
     } else {
+      appStarted = false;
       state.watchlistIds = new Set();
       state.likedIds = new Set();
       state.myProfile = null;

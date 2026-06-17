@@ -99,6 +99,11 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
 - **Shareable links** for movies and profiles (`?movie=` / `?user=`)
 - **Movies *and* TV series** — browse/search both, rate whole series, with
   TV-aware details (creators, seasons)
+- **For You** personalized recommendations from your highest-rated titles
+- **Stats / "Your taste"** page: averages, rating distribution, by-decade, top rated
+- **Custom lists** — themed, shareable, public on your profile
+- **Following** activity feed (alongside Everyone / You)
+- **Where to watch** + **More like this** inside each title
 - **Like** any movie or series (♥) — shown on your public profile
 - **Mobile-friendly** responsive layout with a device-choice welcome screen
 - Optional written **reviews** + a community **per-aspect breakdown**
@@ -113,5 +118,6 @@ Run these once each in **Supabase → SQL Editor** (safe to re-run), in order:
 3. [`supabase-migration-3.sql`](supabase-migration-3.sql) — profiles, follows, avatar storage
 4. [`supabase-migration-4.sql`](supabase-migration-4.sql) — movie recommendations
 5. [`supabase-migration-5.sql`](supabase-migration-5.sql) — liked movies
+6. [`supabase-migration-6.sql`](supabase-migration-6.sql) — custom lists
 
 Fresh installs using [`supabase-schema.sql`](supabase-schema.sql) already include everything.

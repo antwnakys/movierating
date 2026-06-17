@@ -98,6 +98,19 @@ export async function getRecentActivity(limit = 40) {
   return data || [];
 }
 
+// Recent ratings from a set of users (the "Following" activity feed).
+export async function getFollowingActivity(userIds, limit = 40) {
+  if (!userIds.length) return [];
+  const { data, error } = await supabase
+    .from("ratings")
+    .select("*")
+    .in("user_id", userIds)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
 // A page of one user's ratings (their "watched" list). 0-indexed.
 export async function getUserRatingsPage(userId, from = 0, size = 18) {
   const { data, error } = await supabase
@@ -325,6 +338,84 @@ export async function getIncomingRecommendations(userId) {
 
 export async function dismissRecommendation(id) {
   return supabase.from("recommendations").delete().eq("id", id);
+}
+
+// ---- Custom lists ----
+
+export async function createList({ user, title, description, isPublic }) {
+  const { data, error } = await supabase
+    .from("lists")
+    .insert({
+      user_id: user.id,
+      user_name: user.user_metadata?.display_name || user.email.split("@")[0],
+      title: title.trim(),
+      description: description?.trim() || null,
+      is_public: isPublic !== false,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getUserLists(userId) {
+  const { data, error } = await supabase
+    .from("lists")
+    .select("*, list_items(count)")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getList(listId) {
+  const { data, error } = await supabase.from("lists").select("*").eq("id", listId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getListItems(listId) {
+  const { data, error } = await supabase
+    .from("list_items")
+    .select("*")
+    .eq("list_id", listId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addToList({ listId, movie, user }) {
+  await supabase.from("lists").update({ updated_at: new Date().toISOString() }).eq("id", listId);
+  return supabase.from("list_items").upsert(
+    {
+      list_id: listId,
+      user_id: user.id,
+      movie_id: movie.id,
+      movie_title: movie.title,
+      movie_poster: movie.poster_path || null,
+      movie_year: (movie.release_date || "").slice(0, 4) || null,
+    },
+    { onConflict: "list_id,movie_id" }
+  );
+}
+
+export async function removeFromList(listId, movieId) {
+  return supabase.from("list_items").delete().eq("list_id", listId).eq("movie_id", movieId);
+}
+
+export async function deleteList(listId) {
+  return supabase.from("lists").delete().eq("id", listId);
+}
+
+// Which of the user's lists already contain a given movie id.
+export async function getListsContaining(userId, movieId) {
+  const { data, error } = await supabase
+    .from("list_items")
+    .select("list_id")
+    .eq("user_id", userId)
+    .eq("movie_id", movieId);
+  if (error) throw error;
+  return new Set((data || []).map((r) => r.list_id));
 }
 
 // Count incoming recommendations newer than `since` (ISO string or null).
