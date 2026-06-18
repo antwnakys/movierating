@@ -1938,55 +1938,6 @@ function renderModal() {
       </div>
     </div>
 
-    ${
-      cast.length
-        ? `<div class="cast">
-            <h3>Cast</h3>
-            <div class="cast-row">${cast.slice(0, 15).map(castCard).join("")}</div>
-          </div>`
-        : ""
-    }
-
-    ${
-      providers.length
-        ? `<div class="cast">
-            <h3>Where to watch</h3>
-            <div class="provider-row">
-              ${providers
-                .map(
-                  (p) => `<div class="provider" title="${esc(p.provider_name)}">
-                    <img src="${TMDB.IMG_LOGO}${p.logo_path}" alt="${esc(p.provider_name)}" />
-                    <span>${esc(p.provider_name)}</span>
-                  </div>`
-                )
-                .join("")}
-            </div>
-          </div>`
-        : ""
-    }
-
-    ${
-      similar.length
-        ? `<div class="cast">
-            <h3>More like this</h3>
-            <div class="cast-row">
-              ${similar
-                .map(
-                  (s) => `<div class="sim-card" data-mid="${s.id}" data-mt="${s.media_type}">
-                    ${
-                      s.poster_path
-                        ? `<img class="cast-photo" loading="lazy" src="${TMDB.IMG}${s.poster_path}" alt="${esc(s.title)}" />`
-                        : `<div class="cast-photo placeholder">${esc(s.title.slice(0, 1))}</div>`
-                    }
-                    <div class="cast-name">${esc(s.title)}</div>
-                  </div>`
-                )
-                .join("")}
-            </div>
-          </div>`
-        : ""
-    }
-
     <div class="score-row">
       <div class="score-box">
         <div class="score-num"><span class="star">★</span> ${avg ? avg.toFixed(1) : "–"}<span style="font-size:14px;color:var(--muted)">/5</span></div>
@@ -2081,6 +2032,55 @@ function renderModal() {
               </select>
             </div>
             <div id="episodeList"><p class="empty">Pick a season to start rating episodes.</p></div>
+          </div>`
+        : ""
+    }
+
+    ${
+      cast.length
+        ? `<div class="cast">
+            <h3>Cast</h3>
+            <div class="cast-row">${cast.slice(0, 15).map(castCard).join("")}</div>
+          </div>`
+        : ""
+    }
+
+    ${
+      providers.length
+        ? `<div class="cast">
+            <h3>Where to watch</h3>
+            <div class="provider-row">
+              ${providers
+                .map(
+                  (p) => `<div class="provider" title="${esc(p.provider_name)}">
+                    <img src="${TMDB.IMG_LOGO}${p.logo_path}" alt="${esc(p.provider_name)}" />
+                    <span>${esc(p.provider_name)}</span>
+                  </div>`
+                )
+                .join("")}
+            </div>
+          </div>`
+        : ""
+    }
+
+    ${
+      similar.length
+        ? `<div class="cast">
+            <h3>More like this</h3>
+            <div class="cast-row">
+              ${similar
+                .map(
+                  (s) => `<div class="sim-card" data-mid="${s.id}" data-mt="${s.media_type}">
+                    ${
+                      s.poster_path
+                        ? `<img class="cast-photo" loading="lazy" src="${TMDB.IMG}${s.poster_path}" alt="${esc(s.title)}" />`
+                        : `<div class="cast-photo placeholder">${esc(s.title.slice(0, 1))}</div>`
+                    }
+                    <div class="cast-name">${esc(s.title)}</div>
+                  </div>`
+                )
+                .join("")}
+            </div>
           </div>`
         : ""
     }

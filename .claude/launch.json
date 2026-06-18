@@ -4,8 +4,8 @@
     {
       "name": "cinerate",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8785"],
-      "port": 8785
+      "runtimeArgs": ["-m", "http.server", "8786"],
+      "port": 8786
     }
   ]
 }
