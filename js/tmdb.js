@@ -81,6 +81,17 @@ export function getGenres(type) {
   return tmdb(`/genre/${type}/list`);
 }
 
+// Titles available on a set of streaming providers in a region (flatrate).
+export function discoverByProviders(type, { providers, region = "US", page = 1 }) {
+  return tmdb(`/discover/${type}`, {
+    with_watch_providers: providers,
+    watch_region: region,
+    with_watch_monetization_types: "flatrate",
+    sort_by: "popularity.desc",
+    page,
+  });
+}
+
 // Filter by genre (and order to match the chosen category).
 export function discover(type, { genreId, category = "popular", page = 1 }) {
   const sort =

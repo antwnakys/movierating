@@ -106,6 +106,8 @@ supabase-migration.sql# upgrade an existing DB: half-stars + watchlist
 - **Custom lists** — themed, shareable, public on your profile
 - **Following** activity feed (alongside Everyone / You)
 - **Where to watch** + **More like this** inside each title
+- **Your streaming services** (Settings): pick Netflix/Prime/Disney+/… and a
+  region → a "On my services" browse category + a "✓ You can watch this" banner
 - **Like** any movie or series (♥) — shown on your public profile
 - **Mobile-friendly** responsive layout with a device-choice welcome screen
 - Optional written **reviews** + a community **per-aspect breakdown**

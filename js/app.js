@@ -21,6 +21,7 @@ const state = {
   category: "popular", // popular | top_rated | new
   genreId: "", // "" = all genres
   genres: { movie: [], tv: [] }, // cached genre lists
+  serviceSettings: loadServiceSettings(), // { region, services: [providerId] }
   query: "",
   page: 1,
   totalPages: 1,
@@ -41,6 +42,35 @@ const ASPECTS = [
 ];
 const emptyAspects = () => ({ movie: 0, directing: 0, acting: 0, music: 0, scenario: 0 });
 const num = (v) => (v == null ? 0 : Number(v));
+
+// Streaming services (TMDB provider ids) + regions for the "can I watch it?" feature.
+const STREAMING = [
+  { id: 8, name: "Netflix" },
+  { id: 9, name: "Prime Video" },
+  { id: 337, name: "Disney+" },
+  { id: 1899, name: "Max" },
+  { id: 15, name: "Hulu" },
+  { id: 350, name: "Apple TV+" },
+  { id: 531, name: "Paramount+" },
+  { id: 386, name: "Peacock" },
+];
+const REGIONS = [
+  ["US", "United States"], ["GB", "United Kingdom"], ["CA", "Canada"], ["AU", "Australia"],
+  ["IE", "Ireland"], ["DE", "Germany"], ["FR", "France"], ["ES", "Spain"], ["IT", "Italy"],
+  ["NL", "Netherlands"], ["GR", "Greece"], ["BR", "Brazil"], ["MX", "Mexico"], ["IN", "India"],
+];
+function loadServiceSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem("cinerate_services") || "{}");
+    return { region: s.region || "US", services: Array.isArray(s.services) ? s.services : [] };
+  } catch {
+    return { region: "US", services: [] };
+  }
+}
+function saveServiceSettings(s) {
+  localStorage.setItem("cinerate_services", JSON.stringify(s));
+  state.serviceSettings = s;
+}
 
 // --- Media-type ID namespacing ---------------------------------------------
 // We store movies & series in the same `movie_id` columns. To avoid collisions
@@ -186,6 +216,7 @@ function setupAuthUI() {
   $("#listsBtn").addEventListener("click", () => loadMyLists());
   $("#myRatingsBtn").addEventListener("click", () => loadMine());
   $("#statsBtn").addEventListener("click", () => loadStats());
+  $("#settingsBtn").addEventListener("click", () => openSettings());
   $("#brandHome").addEventListener("click", (e) => {
     e.preventDefault();
     $("#searchInput").value = "";
@@ -307,6 +338,7 @@ async function loadPopular(page = 1) {
   state.page = page;
   if (page === 1) clearPeople();
   setBrowseControls(true);
+  if (state.category === "providers") return loadProviders(page);
   const type = state.browseType;
   const typeWord = type === "tv" ? "series" : "movies";
   const genreName = state.genreId
@@ -325,6 +357,33 @@ async function loadPopular(page = 1) {
 
 function setBrowseControls(visible) {
   $("#browseControls").classList.toggle("hidden", !visible);
+}
+
+async function loadProviders(page = 1) {
+  const type = state.browseType;
+  const st = state.serviceSettings;
+  $("#sectionTitle").textContent = `${type === "tv" ? "Series" : "Movies"} on your services`;
+  if (!st.services.length) {
+    showBrowse();
+    $("#grid").classList.remove("list");
+    $("#grid").innerHTML = "";
+    $("#loadMore").classList.add("hidden");
+    $("#gridStatus").innerHTML =
+      'No streaming services set yet. <a href="#" id="openSettingsLink" style="color:var(--accent)">Open Settings</a> to pick yours.';
+    $("#openSettingsLink")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      openSettings();
+    });
+    return;
+  }
+  await runLoad(async () => {
+    const data = await TMDB.discoverByProviders(type, {
+      providers: st.services.join("|"),
+      region: st.region,
+      page,
+    });
+    return { ...data, results: (data.results || []).map((it) => TMDB.normalizeItem(it, type)) };
+  }, page === 1);
 }
 
 async function loadGenres(type) {
@@ -1356,6 +1415,40 @@ async function openPeopleList(title, userId, kind) {
 }
 
 // =====================================================
+//  SETTINGS (streaming services)
+// =====================================================
+function openSettings() {
+  const st = state.serviceSettings;
+  const sel = new Set(st.services);
+  openSheet(`
+    <div class="people-list-head"><h2>Your streaming services</h2></div>
+    <div class="settings-box">
+      <label class="settings-row">
+        <span>Region</span>
+        <select id="regionSelect" class="genre-select">
+          ${REGIONS.map(([c, n]) => `<option value="${c}" ${c === st.region ? "selected" : ""}>${esc(n)}</option>`).join("")}
+        </select>
+      </label>
+      <p class="muted small" style="margin:6px 0 10px">Pick the services you subscribe to — we'll show what you can watch.</p>
+      <div class="service-chips">
+        ${STREAMING.map((s) => `<button class="service-chip ${sel.has(s.id) ? "on" : ""}" data-id="${s.id}">${esc(s.name)}</button>`).join("")}
+      </div>
+      <button class="btn btn-primary" id="saveSettings">Save</button>
+      <span id="settingsStatus" class="muted small"></span>
+    </div>
+  `);
+  $("#sheetBody")
+    .querySelectorAll(".service-chip")
+    .forEach((c) => c.addEventListener("click", () => c.classList.toggle("on")));
+  $("#saveSettings").addEventListener("click", () => {
+    const services = [...$("#sheetBody").querySelectorAll(".service-chip.on")].map((c) => Number(c.dataset.id));
+    saveServiceSettings({ region: $("#regionSelect").value, services });
+    $("#settingsStatus").textContent = "Saved!";
+    if (state.mode === "popular" && state.category === "providers") loadPopular();
+  });
+}
+
+// =====================================================
 //  PERSON PAGE (actor / director bio + filmography)
 // =====================================================
 async function openPerson(personId) {
@@ -1787,7 +1880,10 @@ function renderModal() {
   const cast = m.credits?.cast || [];
   const directors = isTV ? m.created_by || [] : crew.filter((c) => c.job === "Director");
   const creditLabel = isTV ? "Created by" : "Directed by";
-  const providers = TMDB.watchProviders(m);
+  const region = state.serviceSettings.region || "US";
+  const myServiceIds = state.serviceSettings.services || [];
+  const providers = TMDB.watchProviders(m, region);
+  const haveProvs = providers.filter((p) => myServiceIds.includes(p.provider_id));
   const similar = (m.recommendations?.results || [])
     .slice(0, 12)
     .map((it) => TMDB.normalizeItem(it, modalState.mediaType));
@@ -1832,6 +1928,13 @@ function renderModal() {
           <button class="btn btn-watch" id="recommendMovie">📨 Recommend</button>
           <button class="btn btn-watch" id="shareMovie">↗ Share</button>
         </div>
+        ${
+          haveProvs.length
+            ? `<div class="watch-banner can-watch">✓ You can watch this — it's on ${haveProvs.map((p) => esc(p.provider_name)).join(", ")}</div>`
+            : myServiceIds.length && providers.length
+              ? `<div class="watch-banner no-watch">Not on your services — streaming on ${providers.map((p) => esc(p.provider_name)).join(", ")}</div>`
+              : ""
+        }
       </div>
     </div>
 
